@@ -220,43 +220,67 @@ canvas#bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-in
 // === AUDIO ===
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-function playSelectSound() {
+function noise(dur) {
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+
+function playDeepPulse() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(60, now);
+  o.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+  g.gain.setValueAtTime(0.35, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + 0.45);
+  const s = audioCtx.createBufferSource(), gn = audioCtx.createGain(), fl = audioCtx.createBiquadFilter();
+  s.buffer = noise(0.03); fl.type = 'bandpass'; fl.frequency.value = 800; fl.Q.value = 2;
+  gn.gain.setValueAtTime(0.15, now);
+  gn.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+  s.connect(fl); fl.connect(gn); gn.connect(audioCtx.destination);
+  s.start(now); s.stop(now + 0.04);
+}
 
-  // Tetris Effect style: layered crystalline tones
-  const notes = [523, 659, 784]; // C5, E5, G5 arpeggio
-  notes.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const filter = audioCtx.createBiquadFilter();
-    osc.type = 'sine';
-    const t = now + i * 0.04;
-    osc.frequency.setValueAtTime(freq, t);
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(3000, t);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.12, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(t);
-    osc.stop(t + 0.4);
+function playStats() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+  [440, 880, 1320].forEach((freq, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    const t = now + i * 0.07;
+    g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.23);
   });
+}
 
-  // Sub bass thud
-  const sub = audioCtx.createOscillator();
-  const subGain = audioCtx.createGain();
-  sub.type = 'sine';
-  sub.frequency.setValueAtTime(80, now);
-  sub.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-  subGain.gain.setValueAtTime(0.15, now);
-  subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-  sub.connect(subGain);
-  subGain.connect(audioCtx.destination);
-  sub.start(now);
-  sub.stop(now + 0.2);
+function playLeaderboard() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+  [1568, 2093].forEach((freq, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    const t = now + i * 0.06;
+    g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.15);
+  });
+}
+
+function playKnobTurn() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const t = now + i * 0.035;
+    const s = audioCtx.createBufferSource(), g = audioCtx.createGain(), f = audioCtx.createBiquadFilter();
+    s.buffer = noise(0.008); f.type = 'bandpass'; f.frequency.value = 4000; f.Q.value = 2;
+    g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.01);
+    s.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    s.start(t); s.stop(t + 0.015);
+  }
 }
 
 // === PARTICLE BURST ===
@@ -387,13 +411,17 @@ function launchGame(id) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
 
-  playSelectSound();
+  playDeepPulse();
   spawnMistBurst(cx, cy);
 
   setTimeout(() => {
     window.location.href = id + '.html';
   }, 500);
 }
+
+document.getElementById('btn-stats').addEventListener('click', playStats);
+document.getElementById('btn-settings').addEventListener('click', playKnobTurn);
+document.getElementById('btn-leaderboard').addEventListener('click', playLeaderboard);
 </script>
 </body>
 </html>
