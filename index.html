@@ -49,25 +49,30 @@ body { background: #0a0a1a; font-family: monospace; color: #fff; height: 100dvh;
 .top-nav {
   position: absolute;
   top: 16px; right: 16px;
-  display: flex; gap: 10px;
+  display: flex; gap: 12px;
   z-index: 2;
 }
 .nav-btn {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 10px;
-  color: rgba(255,255,255,0.7);
-  font-family: monospace;
-  font-size: 11px;
-  padding: 8px 12px;
+  width: 48px; height: 48px;
+  background: rgba(255,255,255,0.06);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
 }
+.nav-btn svg {
+  width: 22px; height: 22px;
+  fill: rgba(255,255,255,0.45);
+  transition: fill 0.2s;
+}
+.nav-btn:hover svg, .nav-btn:active svg { fill: rgba(255,255,255,0.8); }
 .nav-btn:hover, .nav-btn:active {
   background: rgba(255,255,255,0.1);
-  border-color: rgba(0, 200, 255, 0.4);
-  color: #fff;
-  box-shadow: 0 0 12px rgba(0, 200, 255, 0.2);
+  border-color: rgba(0, 200, 255, 0.35);
+  box-shadow: 0 0 14px rgba(0, 200, 255, 0.15), 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .games-list {
@@ -195,9 +200,15 @@ canvas { display: block; max-width: 100vw; max-height: 100dvh; }
 <div id="menu-screen" class="screen active">
   <div class="menu-stars" id="menu-stars"></div>
   <div class="top-nav">
-    <button class="nav-btn" onclick="showSub('Leaderboard')">Leaderboard</button>
-    <button class="nav-btn" onclick="showSub('Stats')">Stats</button>
-    <button class="nav-btn" onclick="showSub('Settings')">Settings</button>
+    <button class="nav-btn" onclick="showSub('Leaderboard')" aria-label="Leaderboard">
+      <svg viewBox="0 0 24 24"><path d="M7.5 2v3.5H4a1 1 0 00-1 1V9c0 2.1 1.4 3.9 3.3 4.4C7.3 15 9 16.2 11 16.5V19H8.5a.5.5 0 00-.5.5V21a1 1 0 001 1h6a1 1 0 001-1v-1.5a.5.5 0 00-.5-.5H13v-2.5c2-.3 3.7-1.5 4.7-3.1C19.6 12.9 21 11.1 21 9V6.5a1 1 0 00-1-1h-3.5V2h-9zM5 7.5h2.5V11c0 .2 0 .3 0 .5C6 11.1 5 10 5 9V7.5zm14 0V9c0 1-.9 2.1-2.5 2.5 0-.2 0-.3 0-.5V7.5H19zM9.5 4h5v7a2.5 2.5 0 01-5 0V4z"/></svg>
+    </button>
+    <button class="nav-btn" onclick="showSub('Stats')" aria-label="Stats">
+      <svg viewBox="0 0 24 24"><rect x="4" y="13" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>
+    </button>
+    <button class="nav-btn" onclick="showSub('Settings')" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-.97l2.11-1.65a.5.5 0 00.12-.64l-2-3.46a.5.5 0 00-.61-.22l-2.49 1a7.37 7.37 0 00-1.67-.97l-.38-2.65A.49.49 0 0014 2h-4a.49.49 0 00-.49.42l-.38 2.65c-.61.25-1.17.59-1.67.97l-2.49-1a.49.49 0 00-.61.22l-2 3.46a.49.49 0 00.12.64l2.11 1.65c-.04.32-.07.65-.07.97s.03.66.07.97l-2.11 1.65a.5.5 0 00-.12.64l2 3.46a.5.5 0 00.61.22l2.49-1c.5.38 1.06.72 1.67.97l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.67-.97l2.49 1a.49.49 0 00.61-.22l2-3.46a.5.5 0 00-.12-.64l-2.11-1.65z"/></svg>
+    </button>
   </div>
   <div class="menu-title">STACK TOWER<span class="sub">ARCADE</span></div>
   <div class="games-list">
