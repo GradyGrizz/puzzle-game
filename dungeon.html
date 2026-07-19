@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Neon Dungeon</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #05050f;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  user-select: none;
+  -webkit-user-select: none;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.back-btn {
+  position: fixed;
+  top: 14px; left: 14px;
+  z-index: 20;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.55);
+  font-family: monospace;
+  font-size: 11px;
+  padding: 7px 12px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+.back-btn:active {
+  color: #fff;
+  border-color: rgba(0,200,255,0.4);
+}
+.dpad {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 56px 56px 56px;
+  grid-template-rows: 56px 56px 56px;
+  gap: 5px;
+  z-index: 10;
+}
+.dpad-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1.5px solid rgba(255,255,255,0.11);
+  border-radius: 12px;
+  color: rgba(255,255,255,0.35);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.07s, border-color 0.07s, color 0.07s;
+}
+.dpad-btn:active {
+  background: rgba(0,200,255,0.1);
+  border-color: rgba(0,200,255,0.4);
+  color: rgba(0,200,255,0.8);
+}
+</style>
+</head>
+<body>
+
+<button class="back-btn" onclick="window.location.href='index.html'">← MENU</button>
+<canvas id="c"></canvas>
+
+<div class="dpad">
+  <div></div>
+  <div class="dpad-btn" id="btn-up">▲</div>
+  <div></div>
+  <div class="dpad-btn" id="btn-left">◀</div>
+  <div></div>
+  <div class="dpad-btn" id="btn-right">▶</div>
+  <div></div>
+  <div class="dpad-btn" id="btn-down">▼</div>
+  <div></div>
+</div>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// Tile IDs
+const WL=2, FL=1, DN=3, DS=4, DE=5, DW=6, CH=7, SW=8, BL=9;
+
+// Room: 11 cols × 9 rows
+let map = [
+  [WL, WL, WL, WL, WL, DN, WL, WL, WL, WL, WL],
+  [WL, FL, FL, FL, FL, FL, FL, FL, FL, FL, WL],
+  [WL, FL, FL, FL, FL, FL, FL, BL, FL, FL, WL],
+  [WL, FL, FL, FL, FL, FL, FL, FL, FL, FL, WL],
+  [DW, FL, FL, BL, FL, SW, FL, FL, FL, FL, DE],
+  [WL, FL, FL, FL, FL, FL, FL, FL, FL, FL, WL],
+  [WL, FL, FL, FL, FL, FL, FL, FL, CH, FL, WL],
+  [WL, FL, FL, FL, FL, FL, FL, FL, FL, FL, WL],
+  [WL, WL, WL, WL, WL, DS, WL, WL, WL, WL, WL],
+];
+
+const ROWS = 9, COLS = 11;
+const player = { col: 5, row: 4 };
+
+let TILE, W, H;
+
+function resize() {
+  TILE = Math.floor(Math.min(window.innerWidth, 420) / COLS);
+  W = canvas.width  = TILE * COLS;
+  H = canvas.height = TILE * ROWS;
+  canvas.style.marginTop = Math.max(8, (window.innerHeight - H - 190) / 2) + 'px';
+  ctx.imageSmoothingEnabled = false;
+}
+resize();
+window.addEventListener('resize', () => { resize(); draw(); });
+
+// ─── Palette ────────────────────────────────────────────────
+const C = {
+  bg:         '#05050f',
+  flBase:     '#111120',
+  flLine:     '#09091a',
+  flDot:      '#1a1a30',
+  wBg:        '#070710',
+  wFace:      '#0c0c1c',
+  wBrick:     '#121228',
+  wHi:        '#1c1c36',
+  wMortar:    '#04040c',
+  wShadow:    '#030308',
+  dGlow:      '#00c8ff',
+  dFrame:     '#006888',
+  dPass:      '#010b10',
+  chGold:     '#c08820',
+  chLid:      '#d8a030',
+  chShine:    '#f0c858',
+  chLine:     '#705010',
+  swRing:     '#00ffaa',
+  swBg:       '#001812',
+  blFace:     '#16162a',
+  blHi:       '#22223a',
+  blShadow:   '#080815',
+  plBody:     '#1c88e0',
+  plDark:     '#0f5899',
+  plSkin:     '#e8be78',
+  plHair:     '#2a1808',
+  plShad:     'rgba(0,0,0,0.38)',
+};
+
+// ─── Tile drawers ────────────────────────────────────────────
+
+function floor(x, y, t) {
+  ctx.fillStyle = C.flBase;
+  ctx.fillRect(x, y, t, t);
+  ctx.fillStyle = C.flLine;
+  ctx.fillRect(x, y, t, 1);
+  ctx.fillRect(x, y, 1, t);
+  const d = Math.floor(t * 0.28);
+  ctx.fillStyle = C.flDot;
+  ctx.fillRect(x+d, y+d, 2, 2);
+  ctx.fillRect(x+t-d-2, y+t-d-2, 2, 2);
+}
+
+function wall(x, y, t) {
+  ctx.fillStyle = C.wBg;
+  ctx.fillRect(x, y, t, t);
+  ctx.fillStyle = C.wFace;
+  ctx.fillRect(x+1, y, t-1, t-1);
+  const h = Math.floor(t * 0.5);
+  // Brick top highlights
+  ctx.fillStyle = C.wHi;
+  ctx.fillRect(x+2, y+2, t-3, 2);
+  ctx.fillRect(x+2, y+h+2, t-3, 2);
+  // Horizontal mortar
+  ctx.fillStyle = C.wMortar;
+  ctx.fillRect(x+1, y+h, t-1, 2);
+  // Vertical mortar — offset brick rows
+  ctx.fillRect(x + Math.floor(t*0.50), y+2,    1, h-2);
+  ctx.fillRect(x + Math.floor(t*0.25), y+h+2,  1, t-h-3);
+  ctx.fillRect(x + Math.floor(t*0.75), y+h+2,  1, t-h-3);
+  // Mid-brick face shading
+  ctx.fillStyle = C.wBrick;
+  ctx.fillRect(x+2,               y+2,   Math.floor(t*0.23), h-4);
+  ctx.fillRect(x+Math.floor(t*0.26), y+h+2, Math.floor(t*0.23), t-h-4);
+  // Shadow edges
+  ctx.fillStyle = C.wShadow;
+  ctx.fillRect(x,   y+t-1, t, 1);
+  ctx.fillRect(x,   y,     1, t);
+}
+
+function door(x, y, t, ns) {
+  // ns=true → north/south passage (vertical opening)
+  floor(x, y, t);
+  ctx.shadowColor = C.dGlow;
+  ctx.shadowBlur = 9;
+  ctx.fillStyle = C.dFrame;
+  if (ns) {
+    ctx.fillRect(x+1, y, 3, t);
+    ctx.fillRect(x+t-4, y, 3, t);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = C.dPass;
+    ctx.fillRect(x+4, y, t-8, t);
+    ctx.fillStyle = C.dGlow;
+    ctx.fillRect(x+1, y, 1, t);
+    ctx.fillRect(x+t-2, y, 1, t);
+  } else {
+    ctx.fillRect(x, y+1, t, 3);
+    ctx.fillRect(x, y+t-4, t, 3);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = C.dPass;
+    ctx.fillRect(x, y+4, t, t-8);
+    ctx.fillStyle = C.dGlow;
+    ctx.fillRect(x, y+1, t, 1);
+    ctx.fillRect(x, y+t-2, t, 1);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function chest(x, y, t) {
+  floor(x, y, t);
+  const px = Math.floor(t*0.14), cw = t-px*2;
+  const lidH = Math.floor(t*0.22), bodyH = Math.floor(t*0.30);
+  const cy = y + Math.floor(t*0.24);
+  ctx.shadowColor = '#d09020'; ctx.shadowBlur = 14;
+  ctx.fillStyle = C.chGold;  ctx.fillRect(x+px, cy+lidH, cw, bodyH);
+  ctx.fillStyle = C.chLid;   ctx.fillRect(x+px, cy, cw, lidH);
+  ctx.fillStyle = C.chShine; ctx.fillRect(x+px+2, cy+1, cw-4, 2);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = C.chLine;
+  ctx.fillRect(x+px,      cy,            cw, 1);
+  ctx.fillRect(x+px,      cy+lidH+bodyH-1, cw, 1);
+  ctx.fillRect(x+px,      cy,            1, lidH+bodyH);
+  ctx.fillRect(x+px+cw-1, cy,            1, lidH+bodyH);
+  // Hasp
+  const lx = x + Math.floor(t/2) - 1;
+  ctx.fillStyle = '#fff8b0';
+  ctx.fillRect(lx, cy+lidH-2, 3, 5);
+}
+
+function switchTile(x, y, t) {
+  floor(x, y, t);
+  const cx = x + Math.floor(t/2), cy = y + Math.floor(t/2);
+  const r = Math.floor(t * 0.30);
+  ctx.shadowColor = C.swRing; ctx.shadowBlur = 16;
+  ctx.fillStyle = C.swRing;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = C.swBg;
+  ctx.beginPath(); ctx.arc(cx, cy, r-3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = C.swRing;
+  ctx.fillRect(cx-1, cy-r+1, 2, 4);
+  ctx.fillRect(cx-1, cy+r-5, 2, 4);
+  ctx.fillRect(cx-r+1, cy-1, 4, 2);
+  ctx.fillRect(cx+r-5, cy-1, 4, 2);
+  ctx.shadowColor = C.swRing; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function block(x, y, t) {
+  floor(x, y, t);
+  const p = Math.floor(t*0.1), bs = t-p*2;
+  ctx.fillStyle = 'rgba(0,0,0,0.48)'; ctx.fillRect(x+p+2, y+p+2, bs, bs);
+  ctx.fillStyle = C.blFace;           ctx.fillRect(x+p, y+p, bs, bs);
+  ctx.fillStyle = C.blHi;
+  ctx.fillRect(x+p, y+p, bs, 3);
+  ctx.fillRect(x+p, y+p, 3, bs);
+  ctx.fillStyle = C.blShadow;
+  ctx.fillRect(x+p,      y+p+bs-2, bs, 2);
+  ctx.fillRect(x+p+bs-2, y+p,      2, bs);
+  // Pixel cross
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  const m = Math.floor(t/2);
+  ctx.fillRect(x+m, y+p+4, 1, bs-8);
+  ctx.fillRect(x+p+4, y+m, bs-8, 1);
+}
+
+// ─── Player sprite (16×16 pixel grid) ────────────────────────
+// 1=tunic  2=skin  3=hair  4=dark-tunic
+const PP = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0],
+  [0,0,0,0,3,2,2,2,2,2,2,3,0,0,0,0],
+  [0,0,0,0,3,2,2,2,2,2,2,3,0,0,0,0],
+  [0,0,0,0,3,2,2,2,3,2,2,3,0,0,0,0],
+  [0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0],
+  [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
+  [0,0,4,1,1,1,1,1,1,1,1,1,1,4,0,0],
+  [0,0,4,1,1,1,1,1,1,1,1,1,1,4,0,0],
+  [0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0],
+  [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
+  [0,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0],
+  [0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0],
+  [0,0,0,0,2,2,0,0,0,0,2,2,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+const PC = {1:C.plBody, 2:C.plSkin, 3:C.plHair, 4:C.plDark};
+
+function drawPlayer(col, row, t) {
+  const bx = col*t, by = row*t;
+  const s = Math.max(1, Math.floor(t/16));
+  const off = Math.floor((t - 16*s) / 2);
+  // Shadow
+  ctx.fillStyle = C.plShad;
+  ctx.fillRect(bx+off+3*s, by+off+13*s, 10*s, 2*s);
+  // Pixels
+  for (let py = 0; py < 16; py++) {
+    for (let px = 0; px < 16; px++) {
+      const v = PP[py][px]; if (!v) continue;
+      ctx.fillStyle = PC[v];
+      ctx.fillRect(bx+off+px*s, by+off+py*s, s, s);
+    }
+  }
+}
+
+// ─── Draw ────────────────────────────────────────────────────
+function draw() {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const x = c*TILE, y = r*TILE, t = map[r][c];
+      if      (t===WL) wall(x, y, TILE);
+      else if (t===FL) floor(x, y, TILE);
+      else if (t===DN) door(x, y, TILE, true);
+      else if (t===DS) door(x, y, TILE, true);
+      else if (t===DE) door(x, y, TILE, false);
+      else if (t===DW) door(x, y, TILE, false);
+      else if (t===CH) chest(x, y, TILE);
+      else if (t===SW) switchTile(x, y, TILE);
+      else if (t===BL) block(x, y, TILE);
+    }
+  }
+  drawPlayer(player.col, player.row, TILE);
+}
+
+// ─── Movement ────────────────────────────────────────────────
+function move(dc, dr) {
+  const nc = player.col+dc, nr = player.row+dr;
+  if (nr<0||nr>=ROWS||nc<0||nc>=COLS) return;
+  const t = map[nr][nc];
+  if (t===WL) return;
+  if (t===BL) {
+    const bc=nc+dc, br=nr+dr;
+    if (br<0||br>=ROWS||bc<0||bc>=COLS) return;
+    if (map[br][bc]!==FL) return;
+    map[br][bc]=BL; map[nr][nc]=FL;
+  }
+  player.col=nc; player.row=nr;
+  draw();
+}
+
+// D-pad
+[['btn-up',[0,-1]],['btn-down',[0,1]],['btn-left',[-1,0]],['btn-right',[1,0]]].forEach(([id,[dc,dr]])=>{
+  const b = document.getElementById(id);
+  b.addEventListener('touchstart', e=>{e.preventDefault(); move(dc,dr);}, {passive:false});
+  b.addEventListener('mousedown', ()=>move(dc,dr));
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  const m = {ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+  if (m[e.key]) { e.preventDefault(); move(...m[e.key]); }
+});
+
+draw();
+</script>
+</body>
+</html>
