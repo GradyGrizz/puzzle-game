@@ -16,29 +16,57 @@ html, body {
 }
 canvas {
   position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+  left: 50%;
+  transform: translateX(-50%);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+.dpad {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 64px 64px 64px;
+  grid-template-rows: 64px 64px 64px;
+  gap: 5px;
+  z-index: 10;
+}
+.dp {
+  background: rgba(255,255,255,0.07);
+  border: 2px solid rgba(255,255,255,0.13);
+  border-radius: 14px;
+  color: rgba(255,255,255,0.4);
+  font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  -webkit-user-select: none;
+  transition: background 0.07s, border-color 0.07s, color 0.07s;
+}
+.dp:active {
+  background: rgba(200,160,40,0.2);
+  border-color: rgba(210,170,50,0.55);
+  color: rgba(230,190,60,0.9);
 }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div class="dpad">
+  <div></div><div class="dp" id="dp-up">▲</div><div></div>
+  <div class="dp" id="dp-left">◀</div><div></div><div class="dp" id="dp-right">▶</div>
+  <div></div><div class="dp" id="dp-down">▼</div><div></div>
+</div>
 <script>
 'use strict';
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 
-// ── Tile IDs ────────────────────────────────────────────────
-const WALL=0, FLOOR=1, DOOR_N=2, DOOR_SL=3, DOOR_SO=4, SW=5, BLOCK=6, BLOCK_SW=7;
-
+// ── Tile IDs ─────────────────────────────────────────────────
+const WALL=0,FLOOR=1,DOOR_N=2,DOOR_SL=3,DOOR_SO=4,SW=5,BLOCK=6,BLOCK_SW=7;
 const COLS=11, ROWS=9;
 
-// ── Room map ─────────────────────────────────────────────────
-// Block @ (col 4, row 4)  •  Switch @ (col 6, row 6)  •  Locked south door
-// Puzzle: push block right×2, then down×2 to land on switch → door opens
 function initRoom() {
   return [
     [0,0,0,0,0,2,0,0,0,0,0],
@@ -54,292 +82,365 @@ function initRoom() {
 }
 
 let room   = initRoom();
-let player = { col:5, row:2 };
 let solved = false;
 let flash  = 0;
 
 // ── Sizing ───────────────────────────────────────────────────
 let TILE, CW, CH;
 function resize() {
-  TILE = Math.floor(Math.min(window.innerWidth / COLS, window.innerHeight / ROWS));
-  CW = canvas.width  = TILE * COLS;
-  CH = canvas.height = TILE * ROWS;
+  const dpadH = 220;
+  const avail  = window.innerHeight - dpadH;
+  TILE = Math.floor(Math.min(window.innerWidth / COLS, avail / ROWS));
+  CW   = TILE * COLS;
+  CH   = TILE * ROWS;
+  canvas.width  = CW;
+  canvas.height = CH;
+  canvas.style.top = Math.max(6, (avail - CH) / 2) + 'px';
   ctx.imageSmoothingEnabled = false;
-  draw();
 }
 window.addEventListener('resize', resize);
 
-// ── ALTTP dungeon palette ────────────────────────────────────
+// ── Palette (ALTTP dungeon) ───────────────────────────────────
 const C = {
-  bg:    '#08090e',
-  // Floor — dark slate blue
-  fl:    '#1c2232',  flG: '#121828',  flD: '#22283e',
-  // Wall — stone brick
-  wBg:   '#070810',  wFace: '#162030',  wHi: '#263444',
-  wSh:   '#04050a',  wMid:  '#1a2838',
-  // Door frame — warm stone brown
-  dFrm:  '#40301c',  dPass: '#040508',
-  // Chest — amber gold
-  chB:   '#b86c18',  chL: '#d08420',  chS: '#f0a030',  chO: '#683c10',
-  // Switch — orange-red pressure plate (ALTTP style)
-  swPl:  '#b83818',  swBtn: '#d84820',
-  swAPl: '#d85f20',  swABtn:'#f07030',
-  // Pushable block — dark stone
-  blF:   '#1a2440',  blH: '#263450',  blSh: '#0c1020',
-  // Link
-  lGn:   '#246018',  lGL: '#3c8c24',  lGD: '#163a0c',
-  lSk:   '#f0c888',  lHr: '#d09848',
-  lSh:   '#1c60b0',  lBt: '#5c4018',
+  bg:   '#08090e',
+  fl:   '#1c2232', flG: '#121828', flD: '#22283e',
+  wBg:  '#070810', wFace:'#162030', wHi:'#263444',
+  wSh:  '#04050a', wMid:'#1a2838',
+  dFrm: '#40301c', dPass:'#040508',
+  swPl: '#b83818', swBtn:'#d84820', swAPl:'#d85f20', swABtn:'#f07030',
+  blF:  '#1a2440', blH:'#263450',  blSh:'#0c1020',
 };
 
-// ── Tile drawers ─────────────────────────────────────────────
-
-function tFloor(x, y, t) {
-  ctx.fillStyle = C.fl;  ctx.fillRect(x, y, t, t);
-  ctx.fillStyle = C.flG;
-  ctx.fillRect(x, y, t, 1);
-  ctx.fillRect(x, y, 1, t);
-  const d = Math.floor(t * .22);
-  ctx.fillStyle = C.flD;
-  ctx.fillRect(x+d, y+d, 2, 2);
-  ctx.fillRect(x+t-d-2, y+t-d-2, 2, 2);
+// ── Tile drawers ──────────────────────────────────────────────
+function tFloor(x,y,t) {
+  ctx.fillStyle=C.fl; ctx.fillRect(x,y,t,t);
+  ctx.fillStyle=C.flG; ctx.fillRect(x,y,t,1); ctx.fillRect(x,y,1,t);
+  const d=Math.floor(t*.22);
+  ctx.fillStyle=C.flD;
+  ctx.fillRect(x+d,y+d,2,2); ctx.fillRect(x+t-d-2,y+t-d-2,2,2);
+}
+function tWall(x,y,t) {
+  ctx.fillStyle=C.wBg; ctx.fillRect(x,y,t,t);
+  ctx.fillStyle=C.wFace; ctx.fillRect(x+1,y+1,t-2,t-2);
+  const h=Math.floor(t*.52);
+  ctx.fillStyle=C.wHi;
+  ctx.fillRect(x+2,y+2,t-4,2); ctx.fillRect(x+2,y+h+1,t-4,2);
+  ctx.fillStyle=C.wBg;
+  ctx.fillRect(x+1,y+h,t-2,2);
+  ctx.fillRect(x+Math.floor(t*.50),y+2,1,h-3);
+  ctx.fillRect(x+Math.floor(t*.25),y+h+2,1,t-h-4);
+  ctx.fillRect(x+Math.floor(t*.75),y+h+2,1,t-h-4);
+  ctx.fillStyle=C.wMid;
+  ctx.fillRect(x+2,y+2,Math.floor(t*.20),h-4);
+  ctx.fillRect(x+Math.floor(t*.27),y+h+2,Math.floor(t*.20),t-h-4);
+  ctx.fillStyle=C.wSh;
+  ctx.fillRect(x+t-1,y,1,t); ctx.fillRect(x,y+t-1,t,1);
+}
+function tDoorN(x,y,t) {
+  tFloor(x,y,t);
+  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
+  ctx.fillStyle=C.dPass; ctx.fillRect(x+3,y,t-6,t);
+}
+function tDoorSL(x,y,t) {
+  tFloor(x,y,t);
+  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
+  ctx.fillRect(x+3,y,t-6,3);
+  ctx.fillStyle='#1e1008'; ctx.fillRect(x+3,y+3,t-6,t-3);
+  const lx=x+Math.floor(t/2), ly=y+Math.floor(t*.32);
+  ctx.fillStyle='#7a5828';
+  ctx.fillRect(lx-2,ly,5,4); ctx.fillRect(lx-3,ly+3,7,5);
+  ctx.fillStyle='#4a3010'; ctx.fillRect(lx-1,ly+5,3,2);
+}
+function tDoorSO(x,y,t) {
+  tFloor(x,y,t);
+  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
+  ctx.fillStyle=C.dPass; ctx.fillRect(x+3,y,t-6,t);
+}
+function tSwitch(x,y,t,on) {
+  tFloor(x,y,t);
+  const s=Math.floor(t*.68),ox=x+Math.floor((t-s)/2),oy=y+Math.floor((t-s)/2);
+  ctx.fillStyle=on?C.swAPl:C.swPl; ctx.fillRect(ox,oy,s,s);
+  const is=Math.floor(s*.55),iox=ox+Math.floor((s-is)/2),ioy=oy+Math.floor((s-is)/2)+(on?1:0);
+  ctx.fillStyle=on?C.swABtn:C.swBtn; ctx.fillRect(iox,ioy,is,is);
+  ctx.fillStyle='rgba(255,255,255,0.18)';
+  ctx.fillRect(iox,ioy,is,2); ctx.fillRect(iox,ioy,2,is);
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.fillRect(iox,ioy+is-2,is,2); ctx.fillRect(iox+is-2,ioy,2,is);
+}
+function tBlock(x,y,t,glow) {
+  tFloor(x,y,t);
+  const p=Math.floor(t*.1),bs=t-p*2;
+  ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(x+p+2,y+p+2,bs,bs);
+  ctx.fillStyle=C.blF; ctx.fillRect(x+p,y+p,bs,bs);
+  const m=Math.floor(t/2);
+  ctx.fillStyle=C.blSh;
+  ctx.fillRect(x+m-1,y+p+3,2,bs-6); ctx.fillRect(x+p+3,y+m-1,bs-6,2);
+  ctx.fillStyle='rgba(255,255,255,0.06)';
+  ctx.fillRect(x+m,y+p+4,1,bs-7); ctx.fillRect(x+p+4,y+m,bs-7,1);
+  ctx.fillStyle=C.blH;
+  ctx.fillRect(x+p,y+p,bs,3); ctx.fillRect(x+p,y+p,3,bs);
+  ctx.fillStyle=C.blSh;
+  ctx.fillRect(x+p+bs-2,y+p,2,bs); ctx.fillRect(x+p,y+p+bs-2,bs,2);
+  if(glow){ctx.fillStyle='rgba(210,80,20,0.28)';ctx.fillRect(x+p,y+p+bs-5,bs,5);}
 }
 
-function tWall(x, y, t) {
-  ctx.fillStyle = C.wBg;   ctx.fillRect(x, y, t, t);
-  ctx.fillStyle = C.wFace; ctx.fillRect(x+1, y+1, t-2, t-2);
-  const h = Math.floor(t * .52);
-  // Row highlights
-  ctx.fillStyle = C.wHi;
-  ctx.fillRect(x+2, y+2,   t-4, 2);
-  ctx.fillRect(x+2, y+h+1, t-4, 2);
-  // Horizontal mortar
-  ctx.fillStyle = C.wBg;
-  ctx.fillRect(x+1, y+h, t-2, 2);
-  // Vertical mortar — offset brick pattern
-  ctx.fillRect(x + Math.floor(t*.50), y+2,    1, h-3);
-  ctx.fillRect(x + Math.floor(t*.25), y+h+2,  1, t-h-4);
-  ctx.fillRect(x + Math.floor(t*.75), y+h+2,  1, t-h-4);
-  // Per-brick face shading
-  ctx.fillStyle = C.wMid;
-  ctx.fillRect(x+2,                   y+2,   Math.floor(t*.20), h-4);
-  ctx.fillRect(x+Math.floor(t*.27),   y+h+2, Math.floor(t*.20), t-h-4);
-  // Shadow edges (right + bottom)
-  ctx.fillStyle = C.wSh;
-  ctx.fillRect(x+t-1, y, 1, t);
-  ctx.fillRect(x, y+t-1, t, 1);
-}
+// ── Link Sprites (16×16 pixel grid) ──────────────────────────
+// Color map: 1=tunic 2=lt-tunic 3=skin 4=hair 5=shield 6=boots
+const SC = {1:'#246018',2:'#3c8c24',3:'#f0c888',4:'#d09848',5:'#1c60b0',6:'#5c4018'};
 
-function tDoorN(x, y, t) {
-  tFloor(x, y, t);
-  ctx.fillStyle = C.dFrm;
-  ctx.fillRect(x, y, 3, t);
-  ctx.fillRect(x+t-3, y, 3, t);
-  ctx.fillStyle = C.dPass;
-  ctx.fillRect(x+3, y, t-6, t);
-}
+// Helper: mirror a frame left↔right for the right-facing direction
+function mirror(fr){ return fr.map(r=>[...r].reverse()); }
 
-function tDoorSL(x, y, t) {
-  tFloor(x, y, t);
-  ctx.fillStyle = C.dFrm;
-  ctx.fillRect(x, y, 3, t);
-  ctx.fillRect(x+t-3, y, 3, t);
-  ctx.fillRect(x+3, y, t-6, 3);
-  ctx.fillStyle = '#1e1008';
-  ctx.fillRect(x+3, y+3, t-6, t-3);
-  // Lock symbol
-  const lx = x + Math.floor(t/2), ly = y + Math.floor(t*.32);
-  ctx.fillStyle = '#7a5828';
-  ctx.fillRect(lx-2, ly,   5, 4);   // shackle arch
-  ctx.fillRect(lx-3, ly+3, 7, 5);   // lock body
-  ctx.fillStyle = '#4a3010';
-  ctx.fillRect(lx-1, ly+5, 3, 2);   // keyhole
-}
-
-function tDoorSO(x, y, t) {
-  tFloor(x, y, t);
-  ctx.fillStyle = C.dFrm;
-  ctx.fillRect(x, y, 3, t);
-  ctx.fillRect(x+t-3, y, 3, t);
-  ctx.fillStyle = C.dPass;
-  ctx.fillRect(x+3, y, t-6, t);
-}
-
-function tSwitch(x, y, t, on) {
-  tFloor(x, y, t);
-  const s = Math.floor(t * .68);
-  const ox = x+Math.floor((t-s)/2), oy = y+Math.floor((t-s)/2);
-  // Plate
-  ctx.fillStyle = on ? C.swAPl : C.swPl;
-  ctx.fillRect(ox, oy, s, s);
-  // Raised button (depressed when on)
-  const is = Math.floor(s * .55);
-  const iox = ox+Math.floor((s-is)/2);
-  const ioy = oy+Math.floor((s-is)/2) + (on ? 1 : 0);
-  ctx.fillStyle = on ? C.swABtn : C.swBtn;
-  ctx.fillRect(iox, ioy, is, is);
-  // Bevel
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(iox, ioy, is, 2);
-  ctx.fillRect(iox, ioy, 2, is);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(iox, ioy+is-2, is, 2);
-  ctx.fillRect(iox+is-2, ioy, 2, is);
-}
-
-function tBlock(x, y, t, onSwitch) {
-  tFloor(x, y, t);
-  const p = Math.floor(t*.1), bs = t-p*2;
-  // Drop shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(x+p+2, y+p+2, bs, bs);
-  // Face
-  ctx.fillStyle = C.blF;
-  ctx.fillRect(x+p, y+p, bs, bs);
-  // Engraved cross (ALTTP push-block detail)
-  const m = Math.floor(t/2);
-  ctx.fillStyle = C.blSh;
-  ctx.fillRect(x+m-1, y+p+3, 2, bs-6);
-  ctx.fillRect(x+p+3, y+m-1, bs-6, 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(x+m,   y+p+4, 1, bs-7);
-  ctx.fillRect(x+p+4, y+m,   bs-7, 1);
-  // Top-left highlight, bottom-right shadow
-  ctx.fillStyle = C.blH;
-  ctx.fillRect(x+p, y+p, bs, 3);
-  ctx.fillRect(x+p, y+p, 3, bs);
-  ctx.fillStyle = C.blSh;
-  ctx.fillRect(x+p+bs-2, y+p, 2, bs);
-  ctx.fillRect(x+p,      y+p+bs-2, bs, 2);
-  // Orange glow at base when sitting on switch
-  if (onSwitch) {
-    ctx.fillStyle = 'rgba(210,80,20,0.28)';
-    ctx.fillRect(x+p, y+p+bs-5, bs, 5);
-  }
-}
-
-// ── Link sprite (16×16 pixel grid) ──────────────────────────
-// 1=tunic  2=lt-tunic  3=skin  4=hair  5=shield  6=boots
-const SPR = [
+// DOWN — 3 frames: [0]=stand, [1]=step-A, [2]=step-B
+const DN_S = [  // shared head+body rows (rows 0-10)
   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0],
-  [0,0,0,0,4,3,3,3,3,3,3,4,0,0,0,0],
-  [0,0,0,0,4,3,3,3,3,3,3,4,0,0,0,0],
-  [0,0,0,0,4,3,3,3,4,3,3,4,0,0,0,0],
-  [0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0],
-  [0,0,5,1,1,1,1,1,1,1,1,1,1,0,0,0],
+  [0,0,0,0,0,4,4,4,4,4,0,0,0,0,0,0],
+  [0,0,0,0,4,3,3,3,3,3,4,0,0,0,0,0],
+  [0,0,0,0,4,3,3,3,3,3,4,0,0,0,0,0],
+  [0,0,0,0,4,3,4,3,3,3,4,0,0,0,0,0],
+  [0,0,0,0,0,4,4,4,4,4,0,0,0,0,0,0],
+  [0,0,5,1,1,1,1,1,1,1,1,1,0,0,0,0],
+  [0,5,5,1,1,1,1,1,1,1,1,1,1,0,0,0],
   [0,5,5,1,2,1,1,1,1,1,2,1,1,3,0,0],
-  [0,5,5,1,1,1,1,1,1,1,1,1,1,3,0,0],
-  [0,0,5,1,1,1,1,1,1,1,1,1,1,0,0,0],
-  [0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0],
-  [0,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0],
-  [0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0],
-  [0,0,0,0,6,6,0,0,0,0,6,6,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,5,1,1,1,1,1,1,1,1,1,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0],
 ];
-const SPRC = {1:C.lGn, 2:C.lGL, 3:C.lSk, 4:C.lHr, 5:C.lSh, 6:C.lBt};
+const DN_LEGS = [
+  // stand
+  [[0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0],
+   [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0],
+   [0,0,0,0,6,6,0,0,0,6,6,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  // step-A (left foot forward/out)
+  [[0,0,0,1,1,1,0,0,0,0,1,1,0,0,0,0],
+   [0,0,0,1,6,0,0,0,0,0,0,1,1,0,0,0],
+   [0,0,0,6,6,0,0,0,0,0,0,6,6,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  // step-B (right foot forward/out)
+  [[0,0,0,0,1,1,0,0,0,1,1,1,0,0,0,0],
+   [0,0,0,0,1,1,0,0,0,0,6,1,0,0,0,0],
+   [0,0,0,0,6,6,0,0,0,0,6,6,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+];
+const SDOWN = DN_LEGS.map(legs=>[...DN_S,...legs]);
 
-function drawLink(col, row, t) {
-  const bx=col*t, by=row*t;
-  const s = Math.max(1, Math.floor(t/16));
+// UP — back view
+const UP_S = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,4,4,4,4,4,0,0,0,0,0,0],
+  [0,0,0,0,4,4,4,4,4,4,4,0,0,0,0,0],
+  [0,0,0,0,4,4,4,4,4,4,4,0,0,0,0,0],
+  [0,0,0,0,4,4,4,4,4,4,4,0,0,0,0,0],
+  [0,0,0,0,0,4,4,4,4,4,0,0,0,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,1,1,1,2,1,1,1,1,1,2,1,1,1,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0],
+];
+const SUP = DN_LEGS.map(legs=>[...UP_S,...legs]);
+
+// LEFT — side profile view
+const LEFT_S = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,4,4,4,4,4,0,0,0,0,0,0,0,0],
+  [0,0,4,4,3,3,3,4,4,0,0,0,0,0,0,0],
+  [0,0,4,3,3,3,3,3,4,0,0,0,0,0,0,0],
+  [0,0,4,3,4,3,3,3,4,0,0,0,0,0,0,0],
+  [0,0,0,4,4,3,3,4,0,0,0,0,0,0,0,0],
+  [0,0,5,5,1,1,1,1,1,1,0,0,0,0,0,0],
+  [0,5,5,5,1,1,1,1,1,1,1,0,0,0,0,0],
+  [0,5,5,5,1,1,1,1,1,1,1,3,0,0,0,0],
+  [0,0,5,5,1,1,1,1,1,1,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0],
+];
+const LEFT_LEGS = [
+  // stand
+  [[0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,6,6,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  // step-A (front leg fwd)
+  [[0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,1,6,0,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,6,1,1,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  // step-B (back leg fwd)
+  [[0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0],
+   [0,0,0,0,1,1,0,6,0,0,0,0,0,0,0,0],
+   [0,0,0,0,6,1,1,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0],
+   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+];
+const SLEFT  = LEFT_LEGS.map(legs=>[...LEFT_S,...legs]);
+const SRIGHT = SLEFT.map(mirror);
+
+const SPRITES = { down:SDOWN, up:SUP, left:SLEFT, right:SRIGHT };
+
+function drawSprite(dir, frame, drawX, drawY, t) {
+  const spr = SPRITES[dir][frame];
+  const s   = Math.max(1, Math.floor(t / 16));
   const off = Math.floor((t - 16*s) / 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(bx+off+3*s, by+off+13*s, 10*s, 2*s);
+  // drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(drawX+off+3*s, drawY+off+13*s, 10*s, 2*s);
   for (let py=0; py<16; py++) for (let px=0; px<16; px++) {
-    const v = SPR[py][px]; if (!v) continue;
-    ctx.fillStyle = SPRC[v];
-    ctx.fillRect(bx+off+px*s, by+off+py*s, s, s);
+    const v = spr[py][px]; if (!v) continue;
+    ctx.fillStyle = SC[v];
+    ctx.fillRect(drawX+off+px*s, drawY+off+py*s, s, s);
   }
 }
 
-// ── Draw ─────────────────────────────────────────────────────
+// ── Animation state ───────────────────────────────────────────
+const MOVE_FRAMES = 10;
+
+const p = {
+  col:5, row:2, dir:'down',
+  moving:false, frame:0,
+  fromCol:5, fromRow:2, toCol:5, toRow:2,
+  progress:0,
+  // block being pushed along
+  pushFrom:null, pushTo:null,
+};
+
+let inputQueue = null;
+
+// ── Game loop ─────────────────────────────────────────────────
+let lastTime = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  // throttle to ~60fps
+  if (ts - lastTime < 14) return;
+  lastTime = ts;
+
+  if (p.moving) {
+    p.progress++;
+    p.frame = p.progress < MOVE_FRAMES/2 ? 1 : 2;
+
+    if (p.progress >= MOVE_FRAMES) {
+      // snap
+      p.col = p.toCol; p.row = p.toRow;
+      p.moving = false; p.frame = 0;
+      // settle pushed block in room state
+      if (p.pushTo) {
+        const {fc,fr,tc,tr} = p.pushTo;
+        const dest = room[tr][tc];
+        room[tr][tc] = (dest===SW) ? BLOCK_SW : BLOCK;
+        room[fr][fc] = (room[fr][fc]===BLOCK_SW) ? SW : FLOOR;
+        p.pushFrom=null; p.pushTo=null;
+        if (!solved) checkWin();
+      }
+      // consume queued input
+      if (inputQueue) {
+        const {dc,dr}=inputQueue; inputQueue=null;
+        tryMove(dc,dr);
+      }
+    }
+    draw();
+  }
+
+  if (flash > 0) { flash=Math.max(0,flash-0.04); draw(); }
+}
+
+// ── Draw ──────────────────────────────────────────────────────
 function draw() {
-  ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, CW, CH);
+  ctx.fillStyle=C.bg; ctx.fillRect(0,0,CW,CH);
 
-  for (let r=0; r<ROWS; r++) for (let c=0; c<COLS; c++) {
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
     const x=c*TILE, y=r*TILE, t=room[r][c];
-    if      (t===WALL)     tWall(x, y, TILE);
-    else if (t===FLOOR)    tFloor(x, y, TILE);
-    else if (t===DOOR_N)   tDoorN(x, y, TILE);
-    else if (t===DOOR_SL)  tDoorSL(x, y, TILE);
-    else if (t===DOOR_SO)  tDoorSO(x, y, TILE);
-    else if (t===SW)       tSwitch(x, y, TILE, false);
-    else if (t===BLOCK)    tBlock(x, y, TILE, false);
-    else if (t===BLOCK_SW) tBlock(x, y, TILE, true);
+    if      (t===WALL)    tWall(x,y,TILE);
+    else if (t===FLOOR)   tFloor(x,y,TILE);
+    else if (t===DOOR_N)  tDoorN(x,y,TILE);
+    else if (t===DOOR_SL) tDoorSL(x,y,TILE);
+    else if (t===DOOR_SO) tDoorSO(x,y,TILE);
+    else if (t===SW)      tSwitch(x,y,TILE,false);
+    else if (t===BLOCK)   tBlock(x,y,TILE,false);
+    else if (t===BLOCK_SW)tBlock(x,y,TILE,true);
   }
 
-  drawLink(player.col, player.row, TILE);
+  // draw pushed block mid-animation
+  if (p.moving && p.pushFrom && p.pushTo) {
+    const prog = p.progress / MOVE_FRAMES;
+    const bx = (p.pushTo.fc + (p.pushTo.tc - p.pushTo.fc)*prog)*TILE;
+    const by = (p.pushTo.fr + (p.pushTo.tr - p.pushTo.fr)*prog)*TILE;
+    tBlock(Math.round(bx), Math.round(by), TILE, false);
+  }
 
-  if (flash > 0) {
-    ctx.fillStyle = `rgba(240,180,40,${flash * 0.18})`;
-    ctx.fillRect(0, 0, CW, CH);
+  // draw Link interpolated
+  let drawX, drawY;
+  if (p.moving) {
+    const prog = p.progress / MOVE_FRAMES;
+    drawX = Math.round((p.fromCol + (p.toCol-p.fromCol)*prog)*TILE);
+    drawY = Math.round((p.fromRow + (p.toRow-p.fromRow)*prog)*TILE);
+  } else {
+    drawX = p.col*TILE; drawY = p.row*TILE;
+  }
+  drawSprite(p.dir, p.frame, drawX, drawY, TILE);
+
+  if (flash>0) {
+    ctx.fillStyle=`rgba(240,180,40,${flash*0.18})`;
+    ctx.fillRect(0,0,CW,CH);
   }
 }
 
-// ── Puzzle logic ─────────────────────────────────────────────
+// ── Logic ─────────────────────────────────────────────────────
 function checkWin() {
-  for (let r=0; r<ROWS; r++) for (let c=0; c<COLS; c++) {
-    if (room[r][c] === BLOCK_SW) {
-      room[8][5] = DOOR_SO;
-      solved = true;
-      flash = 1;
-      animFlash();
-      return;
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+    if (room[r][c]===BLOCK_SW) {
+      room[8][5]=DOOR_SO; solved=true; flash=1; return;
     }
   }
 }
 
-function animFlash() {
-  if (flash <= 0) return;
-  flash = Math.max(0, flash - 0.04);
-  draw();
-  requestAnimationFrame(animFlash);
-}
-
-function move(dc, dr) {
-  const nc=player.col+dc, nr=player.row+dr;
+function tryMove(dc,dr) {
+  const nc=p.col+dc, nr=p.row+dr;
   if (nc<0||nc>=COLS||nr<0||nr>=ROWS) return;
-  const tile = room[nr][nc];
-  if (tile===WALL || tile===DOOR_SL) return;
-  if (tile===BLOCK || tile===BLOCK_SW) {
+  const tile=room[nr][nc];
+  const dir = dc<0?'left':dc>0?'right':dr<0?'up':'down';
+  p.dir=dir;
+
+  if (tile===WALL||tile===DOOR_SL) { draw(); return; }
+
+  let pushing = false;
+  if (tile===BLOCK||tile===BLOCK_SW) {
     const bc=nc+dc, br=nr+dr;
     if (bc<0||bc>=COLS||br<0||br>=ROWS) return;
-    const behind = room[br][bc];
-    if (behind!==FLOOR && behind!==SW) return;
-    room[br][bc] = (behind===SW) ? BLOCK_SW : BLOCK;
-    room[nr][nc] = (tile===BLOCK_SW) ? SW : FLOOR;
-    if (!solved) checkWin();
+    const behind=room[br][bc];
+    if (behind!==FLOOR&&behind!==SW) return;
+    // mark the block as "in transit" — keep it in room for collision but
+    // record the push so we can draw it smoothly and settle at end
+    p.pushFrom={fc:nc,fr:nr};
+    p.pushTo={fc:nc,fr:nr,tc:bc,tr:br};
+    pushing=true;
   }
-  player.col=nc; player.row=nr;
-  draw();
+
+  p.fromCol=p.col; p.fromRow=p.row;
+  p.toCol=nc; p.toRow=nr;
+  p.progress=0; p.frame=1; p.moving=true;
 }
 
-// ── Split-screen touch controls ───────────────────────────────
-// Tap anywhere: direction determined by angle from screen center
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  const touch = e.touches[0];
-  const rect  = canvas.getBoundingClientRect();
-  const dx = (touch.clientX - rect.left)  - CW/2;
-  const dy = (touch.clientY - rect.top)   - CH/2;
-  if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 1 : -1, 0);
-  else                              move(0, dy > 0 ? 1 : -1);
-}, { passive: false });
-
-// Double-tap to reset
-let lastTap = 0;
-canvas.addEventListener('touchend', e => {
-  const now = Date.now();
-  if (now - lastTap < 280) {
-    room = initRoom(); player = {col:5, row:2};
-    solved = false; flash = 0; draw();
-  }
-  lastTap = now;
+// ── D-pad input ───────────────────────────────────────────────
+const DIRS = {
+  'dp-up':   [0,-1], 'dp-down': [0,1],
+  'dp-left': [-1,0], 'dp-right':[1,0],
+};
+Object.entries(DIRS).forEach(([id,[dc,dr]])=>{
+  const btn=document.getElementById(id);
+  const onPress=()=>{
+    if (!p.moving)  tryMove(dc,dr);
+    else            inputQueue={dc,dr};
+  };
+  btn.addEventListener('touchstart',e=>{e.preventDefault();onPress();},{passive:false});
+  btn.addEventListener('mousedown', onPress);
 });
 
 resize();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
