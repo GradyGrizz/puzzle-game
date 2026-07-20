@@ -185,19 +185,18 @@ function tBlock(x,y,t,glow) {
 }
 
 // ── Sprite sheet (hero.png) ────────────────────────────────────
-// Walk frames [sx, sy, sw, sh] — row1=down/right, row2=up/left
+// row1 f0-3 = down, row1 f4-7 = side profile (used for up)
+// row2 f4-7 = left;  right = mirrored left via canvas transform
 const WALK = {
-  down:  [[62,208,63,88],[163,208,66,88],[268,208,67,88],[373,208,66,88]],
-  right: [[474,208,75,88],[566,208,83,88],[666,208,82,88],[766,208,80,88]],
-  up:    [[60,307,64,87],[163,307,66,87],[268,307,66,87],[373,307,65,87]],
-  left:  [[474,307,75,87],[574,307,74,87],[675,307,74,87],[774,307,74,87]],
+  down: [[62,208,63,88],[163,208,66,88],[268,208,67,88],[373,208,66,88]],
+  up:   [[474,208,75,88],[566,208,83,88],[666,208,82,88],[766,208,80,88]],
+  left: [[474,307,75,87],[574,307,74,87],[675,307,74,87],[774,307,74,87]],
 };
-// Push frames — right/left from OTHER ACTIONS section, up/down borrow walk f1
+// Push frames: left char from OTHER ACTIONS (right = mirrored left)
 const PUSH = {
-  right: [920,108,72,93],
-  left:  [1087,108,90,93],
-  down:  [163,208,66,88],
-  up:    [163,307,66,87],
+  left: [1087,108,90,93],
+  down: [163,208,66,88],
+  up:   [474,208,75,88],
 };
 
 const sheet = new Image();
@@ -206,12 +205,13 @@ sheet.onload = () => draw();
 
 function drawHero(dir, walkFrame, tileX, tileY, pushing) {
   if (!sheet.complete) return;
-  const [sx, sy, sw, sh] = pushing ? PUSH[dir] : WALK[dir][walkFrame % 4];
-  const dh = Math.round(TILE * 1.5);
+  const needMirror = dir === 'right';
+  const srcDir = needMirror ? 'left' : dir;
+  const [sx, sy, sw, sh] = pushing ? PUSH[srcDir] : WALK[srcDir][walkFrame % 4];
+  const dh = Math.round(TILE * 1.2);
   const dw = Math.round(dh * sw / sh);
   const dx = tileX + ((TILE - dw) >> 1);
   const dy = tileY + TILE - dh;
-  // ellipse shadow under feet
   ctx.save();
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#000';
@@ -219,7 +219,15 @@ function drawHero(dir, walkFrame, tileX, tileY, pushing) {
   ctx.ellipse(tileX + TILE/2, tileY + TILE - 3, TILE*0.28, TILE*0.07, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
-  ctx.drawImage(sheet, sx, sy, sw, sh, dx, dy, dw, dh);
+  if (needMirror) {
+    ctx.save();
+    ctx.translate(dx + dw, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sheet, sx, sy, sw, sh, 0, dy, dw, dh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(sheet, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
 }
 
 // ── Animation state ───────────────────────────────────────────
@@ -232,6 +240,7 @@ const p = {
   progress:0,
   // block being pushed along
   pushFrom:null, pushTo:null,
+  lastPushDir: null,
 };
 
 let inputQueue = null;
@@ -258,6 +267,7 @@ function loop(ts) {
         const dest = room[tr][tc];
         room[tr][tc] = (dest===SW) ? BLOCK_SW : BLOCK;
         room[fr][fc] = (room[fr][fc]===BLOCK_SW) ? SW : FLOOR;
+        p.lastPushDir = p.dir;
         p.pushFrom=null; p.pushTo=null;
         if (!solved) checkWin();
       }
@@ -306,7 +316,8 @@ function draw() {
   } else {
     drawX = p.col*TILE; drawY = p.row*TILE;
   }
-  drawHero(p.dir, p.frame, drawX, drawY, p.moving && !!p.pushTo);
+  const isPushing = (p.moving && !!p.pushTo) || !!p.lastPushDir;
+  drawHero(p.lastPushDir || p.dir, p.frame, drawX, drawY, isPushing);
 
   if (flash>0) {
     ctx.fillStyle=`rgba(240,180,40,${flash*0.18})`;
@@ -324,6 +335,7 @@ function checkWin() {
 }
 
 function tryMove(dc,dr) {
+  p.lastPushDir = null;
   const nc=p.col+dc, nr=p.row+dr;
   if (nc<0||nc>=COLS||nr<0||nr>=ROWS) return;
   const tile=room[nr][nc];
