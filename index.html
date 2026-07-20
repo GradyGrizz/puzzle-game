@@ -184,30 +184,34 @@ function tBlock(x,y,t,glow) {
   if(glow){ctx.fillStyle='rgba(210,80,20,0.28)';ctx.fillRect(x+p,y+p+bs-5,bs,5);}
 }
 
-// ── Sprite sheet (hero.png) ────────────────────────────────────
-// row1 f0-3 = down, row1 f4-7 = side profile (used for up)
-// row2 f4-7 = left;  right = mirrored left via canvas transform
+// ── Sprite sheets ─────────────────────────────────────────────
+// hero2.png: organized sheet with all 4 directions (1149x1369)
+// push_left.png: correct push-left strip (429x59)
 const WALK = {
-  down: [[62,208,63,88],[163,208,66,88],[268,208,67,88],[373,208,66,88]],
-  up:   [[474,208,75,88],[566,208,83,88],[666,208,82,88],[766,208,80,88]],
-  left: [[474,307,75,87],[574,307,74,87],[675,307,74,87],[774,307,74,87]],
+  up:    [[221,343,46,65],[339,343,48,65],[461,343,48,65],[578,343,48,65]],
+  down:  [[220,411,47,64],[341,411,46,64],[461,411,46,64],[580,411,47,64]],
+  left:  [[217,480,51,63],[337,480,52,63],[459,480,49,63],[577,480,50,63]],
+  right: [[222,551,49,64],[341,551,50,64],[461,551,49,64],[580,551,49,64]],
 };
-// Push frames: left char from OTHER ACTIONS (right = mirrored left)
 const PUSH = {
-  left: [1087,108,90,93],
-  down: [163,208,66,88],
-  up:   [474,208,75,88],
+  up:    [[212,653,67,65],[332,653,65,65],[451,653,66,65],[570,653,66,65]],
+  down:  [[220,727,45,64],[339,727,45,64],[459,727,45,64],[579,727,44,64]],
+  left:  [[70,2,54,51],[161,2,54,51],[254,2,54,51],[345,2,55,51]],
+  right: [[208,875,71,63],[328,875,70,63],[448,875,70,63],[566,875,71,63]],
 };
 
 const sheet = new Image();
-sheet.src = 'hero.png';
+sheet.src = 'hero2.png';
 sheet.onload = () => draw();
 
+const pushLeftSheet = new Image();
+pushLeftSheet.src = 'push_left.png';
+
 function drawHero(dir, walkFrame, tileX, tileY, pushing) {
-  if (!sheet.complete) return;
-  const needMirror = dir === 'right';
-  const srcDir = needMirror ? 'left' : dir;
-  const [sx, sy, sw, sh] = pushing ? PUSH[srcDir] : WALK[srcDir][walkFrame % 4];
+  const frames = pushing ? PUSH[dir] : WALK[dir];
+  const [sx, sy, sw, sh] = frames[walkFrame % 4];
+  const src = (pushing && dir === 'left') ? pushLeftSheet : sheet;
+  if (!src.complete) return;
   const dh = Math.round(TILE * 1.2);
   const dw = Math.round(dh * sw / sh);
   const dx = tileX + ((TILE - dw) >> 1);
@@ -219,15 +223,7 @@ function drawHero(dir, walkFrame, tileX, tileY, pushing) {
   ctx.ellipse(tileX + TILE/2, tileY + TILE - 3, TILE*0.28, TILE*0.07, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
-  if (needMirror) {
-    ctx.save();
-    ctx.translate(dx + dw, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(sheet, sx, sy, sw, sh, 0, dy, dw, dh);
-    ctx.restore();
-  } else {
-    ctx.drawImage(sheet, sx, sy, sw, sh, dx, dy, dw, dh);
-  }
+  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
 // ── Animation state ───────────────────────────────────────────
