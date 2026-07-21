@@ -24,9 +24,12 @@ const Save = {
         bests: [],
       },
       shop: {
-        owned: ['skin_default'],
+        owned: ['skin_default', 'theme_default'],
         skin: 'skin_default',
         theme: 'theme_default',
+        hints: 0,
+        adDay: '',
+        adCount: 0,
       },
       settings: {
         music: true,
@@ -91,6 +94,49 @@ const Save = {
   isLevelDone(id) {
     const rec = this.data.story.levels[id];
     return !!(rec && rec.done);
+  },
+
+  // ── shop ──
+  owns(id) {
+    return id.endsWith('_default') || this.data.shop.owned.includes(id);
+  },
+
+  // returns true on success (coins deducted, item owned)
+  buyItem(id, price) {
+    if (this.owns(id) || this.data.coins < price) return false;
+    this.data.coins -= price;
+    this.data.shop.owned.push(id);
+    this.write();
+    return true;
+  },
+
+  // consumables: pay without ownership (hint packs)
+  spend(price) {
+    if (this.data.coins < price) return false;
+    this.data.coins -= price;
+    this.write();
+    return true;
+  },
+
+  addHints(n) { this.data.shop.hints += n; this.write(); },
+  useHint() {
+    if (this.data.shop.hints <= 0) return false;
+    this.data.shop.hints--;
+    this.write();
+    return true;
+  },
+
+  // rewarded ad allowance: 3 per calendar day
+  adsLeftToday() {
+    const today = new Date().toDateString();
+    if (this.data.shop.adDay !== today) return 3;
+    return Math.max(0, 3 - this.data.shop.adCount);
+  },
+  recordAdWatch() {
+    const today = new Date().toDateString();
+    if (this.data.shop.adDay !== today) { this.data.shop.adDay = today; this.data.shop.adCount = 0; }
+    this.data.shop.adCount++;
+    this.write();
   },
 
   // ── leaderboards (local device) ──

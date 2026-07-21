@@ -27,7 +27,11 @@ const App = {
       game: ScreenGame,
       challenge: ScreenChallenge,
       timed: ScreenTimed,
+      shop: ScreenShop,
     };
+
+    Art.setSkin(Save.data.shop.skin);
+    Art.setTheme(Save.data.shop.theme);
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -103,13 +107,31 @@ const App = {
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
 
-    // canvas taps
+    // canvas taps + drag-scroll (tap fires on release if barely moved)
+    let ptr = null;
     this.canvas.addEventListener('pointerdown', e => {
       if (this.transition) return;
       const r = this.canvas.getBoundingClientRect();
-      const x = e.clientX - r.left, y = e.clientY - r.top;
-      if (this.screen && this.screen.onTap) this.screen.onTap(x, y);
+      ptr = { x: e.clientX - r.left, y: e.clientY - r.top, ly: e.clientY - r.top, moved: false };
     });
+    this.canvas.addEventListener('pointermove', e => {
+      if (!ptr) return;
+      const r = this.canvas.getBoundingClientRect();
+      const y = e.clientY - r.top;
+      const dy = y - ptr.ly;
+      if (Math.abs(y - ptr.y) > 9) ptr.moved = true;
+      if (ptr.moved && this.screen && this.screen.onScroll) this.screen.onScroll(dy);
+      ptr.ly = y;
+    });
+    const ptrUp = e => {
+      if (!ptr) return;
+      const wasTap = !ptr.moved;
+      const { x, y } = ptr;
+      ptr = null;
+      if (wasTap && !this.transition && this.screen && this.screen.onTap) this.screen.onTap(x, y);
+    };
+    this.canvas.addEventListener('pointerup', ptrUp);
+    this.canvas.addEventListener('pointercancel', () => { ptr = null; });
 
     // d-pad buttons
     const DIRS = {
@@ -143,6 +165,7 @@ const App = {
     };
     bindBtn('btn-undo', () => this.screen && this.screen.onUndo && this.screen.onUndo());
     bindBtn('btn-reset', () => this.screen && this.screen.onReset && this.screen.onReset());
+    bindBtn('btn-hint', () => this.screen && this.screen.onHint && this.screen.onHint());
 
     // keyboard
     const KEY_DIRS = {

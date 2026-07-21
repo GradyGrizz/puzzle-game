@@ -177,7 +177,7 @@ const ScreenMenu = {
       { label: 'STORY', sub: 'THE SUNKEN KEEP', action: () => App.setScreen('story') },
       { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', action: () => App.setScreen('challenge') },
       { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', action: () => App.setScreen('timed') },
-      { label: 'SHOP', sub: 'SPEND YOUR COINS', action: () => App.setScreen('soon', { title: 'SHOP' }) },
+      { label: 'SHOP', sub: 'SPEND YOUR COINS', action: () => App.setScreen('shop') },
       { label: 'SETTINGS', action: () => App.setScreen('settings') },
     ]);
   },

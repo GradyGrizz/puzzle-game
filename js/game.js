@@ -57,10 +57,44 @@ const ScreenGame = {
     this.resultInfo = null;
     this.frame = 0;
     this._awarded = false;
+    this.hintPath = null;
     Snd.playMusic('dungeon');
+    // hint scrolls work on story levels (small enough to solve live)
+    const hintBtn = document.getElementById('btn-hint');
+    if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
     if (this.gameMode === 'story' && this.lv.intro && this.firstTime) {
       this.showDialog(this.lv.intro, () => {});
     }
+  },
+
+  onHint() {
+    if (this.gameMode !== 'story') return;
+    if (this.mode !== 'play' && this.mode !== 'moving') return;
+    if (this.hintPath) return; // one at a time
+    if (Save.data.shop.hints <= 0) {
+      Snd.error();
+      this.showToast('NO HINT SCROLLS. VISIT THE SHOP.');
+      return;
+    }
+    const res = solveFrom(this.state, this.inventory(), 300000);
+    if (!res.solvable) {
+      Snd.error();
+      this.showToast('NO WAY FORWARD. TRY UNDO OR RESET.');
+      return;
+    }
+    Save.useHint();
+    Snd.keyGet();
+    // trace the first steps so arrows land on real tiles
+    const steps = [];
+    let sim = this.state;
+    for (let i = 0; i < Math.min(3, res.path.length); i++) {
+      const [dc, dr] = res.path[i];
+      const r2 = move(sim, dc, dr, this.inventory());
+      steps.push({ r: r2.state.player.r, c: r2.state.player.c, dc, dr });
+      sim = r2.state;
+      if (!r2.ok) break;
+    }
+    this.hintPath = { steps, t: 4.5 };
   },
 
   showDialog(text, cb) {
@@ -368,6 +402,7 @@ const ScreenGame = {
     if (this.exitGlow > 0) this.exitGlow = Math.max(0, this.exitGlow - dt * 0.4);
     if (this.fallAnim) { this.fallAnim.t += dt; if (this.fallAnim.t > 0.3) this.fallAnim = null; }
     if (this.cutAnim) { this.cutAnim.t -= dt; if (this.cutAnim.t <= 0) this.cutAnim = null; }
+    if (this.hintPath) { this.hintPath.t -= dt; if (this.hintPath.t <= 0) this.hintPath = null; }
 
     if (this.gameMode === 'timed' && (this.mode === 'play' || this.mode === 'moving')) {
       this.levelMs += dt * 1000;
@@ -501,6 +536,20 @@ const ScreenGame = {
     }
     const animSt = this.anim ? this.anim.newState : st;
     Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
+
+    // hint arrows
+    if (this.hintPath) {
+      const blink = 0.55 + 0.45 * Math.sin(this.t * 6);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.hintPath.t) * blink;
+      for (let i = 0; i < this.hintPath.steps.length; i++) {
+        const sp = this.hintPath.steps[i];
+        const glyph = sp.dr < 0 ? '▲' : sp.dr > 0 ? '▼' : sp.dc < 0 ? '◀' : '▶';
+        const gs = Math.max(2, Math.floor(T / 10));
+        drawText(ctx, glyph, bx + sp.c * T + T / 2, by + sp.r * T + T / 2 - 3 * gs, gs, PAL.goldHi, 'center', '#3a2808');
+      }
+      ctx.restore();
+    }
 
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(240,180,40,${this.flash * 0.16})`;

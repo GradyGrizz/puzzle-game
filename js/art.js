@@ -16,7 +16,52 @@ const PAL = {
   red:  '#c03828',
 };
 
+const PAL_BASE = Object.assign({}, PAL);
+
+// ── shop catalogs ─────────────────────────────────────────────
+const SKINS = {
+  skin_default: { name: 'TRAVELER GREEN',   price: 0,   tint: null },
+  skin_crimson: { name: 'CRIMSON WANDERER', price: 150, tint: [205, 62, 48] },
+  skin_azure:   { name: 'AZURE KNIGHT',     price: 150, tint: [70, 118, 225] },
+  skin_shadow:  { name: 'SHADOW DELVER',    price: 250, tint: [122, 112, 150] },
+  skin_gilded:  { name: 'GILDED HERO',      price: 400, tint: [232, 184, 60] },
+};
+
+const THEMES = {
+  theme_default: { name: 'SUNKEN BLUE', price: 0, pal: {} },
+  theme_ember: {
+    name: 'EMBER HALLS', price: 200,
+    pal: {
+      fl: '#241a16', flG: '#181008', flD: '#2e2119',
+      wBg: '#0e0806', wFace: '#38241a', wHi: '#543826', wMid: '#422c1e', wSh: '#060302',
+      blF: '#432a20', blH: '#5a3a2c', blSh: '#20120c',
+    },
+  },
+  theme_moss: {
+    name: 'VERDANT CRYPT', price: 200,
+    pal: {
+      fl: '#1a2a20', flG: '#101c14', flD: '#223428',
+      wBg: '#080f0a', wFace: '#1c3024', wHi: '#2e4a36', wMid: '#24382a', wSh: '#030704',
+      blF: '#1f3a34', blH: '#2c4c44', blSh: '#0e1c18',
+    },
+  },
+  theme_royal: {
+    name: 'AMETHYST VAULT', price: 200,
+    pal: {
+      fl: '#241d33', flG: '#171126', flD: '#2c2440',
+      wBg: '#0c081a', wFace: '#2a2040', wHi: '#3e3258', wMid: '#322848', wSh: '#050310',
+      blF: '#332a52', blH: '#443a66', blSh: '#171030',
+    },
+  },
+};
+
 const Art = {
+
+// swap the dungeon palette in place; all tile drawers read PAL live
+setTheme(id) {
+  const th = THEMES[id] || THEMES.theme_default;
+  Object.assign(PAL, PAL_BASE, th.pal);
+},
 
 // ── base tiles (preserved) ────────────────────────────────────
 floor(ctx, x, y, t) {
@@ -359,6 +404,7 @@ PUSH: {
 },
 
 sheet: null, pushLeftSheet: null,
+_skin: 'skin_default', _skinCache: {},
 
 loadSprites(onReady) {
   this.sheet = new Image();
@@ -368,11 +414,60 @@ loadSprites(onReady) {
   this.pushLeftSheet.src = 'push_left.png';
 },
 
+// ── skins: recolor the green tunic/cap to a tint, keep shading ──
+setSkin(id) {
+  this._skin = SKINS[id] ? id : 'skin_default';
+},
+
+_recolor(img, tint) {
+  const cv = document.createElement('canvas');
+  cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  const c2 = cv.getContext('2d');
+  c2.drawImage(img, 0, 0);
+  try {
+    const im = c2.getImageData(0, 0, cv.width, cv.height);
+    const d = im.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+      if (!a) continue;
+      // greenish pixels = tunic + cap
+      if (g > r + 14 && g > b + 14) {
+        const lum = (r + g + b) / 3 / 105; // ~105 = midtone of the tunic
+        d[i]     = Math.min(255, Math.round(tint[0] * lum));
+        d[i + 1] = Math.min(255, Math.round(tint[1] * lum));
+        d[i + 2] = Math.min(255, Math.round(tint[2] * lum));
+      }
+    }
+    c2.putImageData(im, 0, 0);
+  } catch (e) {
+    // canvas tainted (file:// dev) — fall back to original colors
+    return img;
+  }
+  return cv;
+},
+
+_activeSheets() {
+  const sk = SKINS[this._skin];
+  if (!sk || !sk.tint) return { sheet: this.sheet, pushLeft: this.pushLeftSheet };
+  let cache = this._skinCache[this._skin];
+  if (!cache) {
+    if (!this.sheet || !this.sheet.complete || !this.pushLeftSheet.complete) {
+      return { sheet: this.sheet, pushLeft: this.pushLeftSheet };
+    }
+    cache = this._skinCache[this._skin] = {
+      sheet: this._recolor(this.sheet, sk.tint),
+      pushLeft: this._recolor(this.pushLeftSheet, sk.tint),
+    };
+  }
+  return cache;
+},
+
 hero(ctx, dir, frame, px, py, tile, pushing) {
   const frames = pushing ? this.PUSH[dir] : this.WALK[dir];
   const [sx, sy, sw, sh] = frames[frame % 4];
-  const src = (pushing && dir === 'left') ? this.pushLeftSheet : this.sheet;
-  if (!src || !src.complete) return;
+  const sheets = this._activeSheets();
+  const src = (pushing && dir === 'left') ? sheets.pushLeft : sheets.sheet;
+  if (!src || (src.complete === false)) return;
   const dh = Math.round(tile * 1.2);
   const dw = Math.round(dh * sw / sh);
   const dx = px + ((tile - dw) >> 1);

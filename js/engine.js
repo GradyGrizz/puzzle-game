@@ -218,7 +218,12 @@ function stateKey(st) {
 }
 
 function solve(def, inventory, maxNodes) {
-  const start = parseLevel(def);
+  return solveFrom(parseLevel(def), inventory, maxNodes);
+}
+
+// BFS from an arbitrary mid-level state (powers hints + tests)
+function solveFrom(startState, inventory, maxNodes) {
+  const start = cloneState(startState);
   if (start.won) return { solvable: true, moves: 0, path: [] };
   const seen = new Set([stateKey(start)]);
   let frontier = [{ st: start, path: [] }];
@@ -247,5 +252,5 @@ function solve(def, inventory, maxNodes) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { TILE, parseLevel, move, solve, stateKey, blockAt, cloneState };
+  module.exports = { TILE, parseLevel, move, solve, solveFrom, stateKey, blockAt, cloneState };
 }
