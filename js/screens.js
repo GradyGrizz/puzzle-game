@@ -6,7 +6,7 @@ function drawBackdrop(ctx, W, H, t) {
   ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H);
   const ts = 44;
   ctx.save();
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.22;
   for (let r = 0; r < Math.ceil(H / ts); r++)
     for (let c = 0; c < Math.ceil(W / ts); c++)
       Art.floor(ctx, c * ts, r * ts, ts);
@@ -47,28 +47,60 @@ class MenuList {
     }
     return false;
   }
-  draw(ctx, cx, y, w, itemH, s) {
+  // sharp card list: hard pixel shadows, gold selection bar, icons,
+  // staggered slide-in when `t` (seconds since screen enter) is given
+  draw(ctx, cx, y, w, itemH, s, t) {
     this.rects = [];
+    const gap = 10;
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];
-      const iy = y + i * (itemH + 8);
-      const x = cx - w / 2;
-      this.rects.push({ x, y: iy, w, h: itemH });
+      const baseY = y + i * (itemH + gap);
+      const x = Math.round(cx - w / 2);
+      this.rects.push({ x, y: baseY, w, h: itemH });
+      const appear = t == null ? 1 : Math.min(1, Math.max(0, (t - i * 0.05) / 0.16));
+      if (appear <= 0) continue;
+      const ease = 1 - Math.pow(1 - appear, 3);
+      const iy = Math.round(baseY + (1 - ease) * 16);
       const seld = i === this.sel;
-      ctx.fillStyle = seld ? 'rgba(210,160,40,0.14)' : 'rgba(255,255,255,0.045)';
+      ctx.save();
+      ctx.globalAlpha = ease;
+      // hard pixel drop shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x + 4, iy + 4, w, itemH);
+      // card body
+      ctx.fillStyle = seld ? '#161226' : '#0d1120';
       ctx.fillRect(x, iy, w, itemH);
+      if (seld) {
+        ctx.fillStyle = 'rgba(210,160,40,0.08)';
+        ctx.fillRect(x, iy, w, itemH);
+      }
+      // border
       ctx.fillStyle = seld ? PAL.gold : 'rgba(255,255,255,0.10)';
       ctx.fillRect(x, iy, w, 2); ctx.fillRect(x, iy + itemH - 2, w, 2);
       ctx.fillRect(x, iy, 2, itemH); ctx.fillRect(x + w - 2, iy, 2, itemH);
-      const col = it.disabled ? PAL.uiDim : (seld ? PAL.goldHi : PAL.ui);
-      const ty = iy + Math.round((itemH - (it.sub ? 7 * s + 5 * (s - 1) + 6 : 7 * s)) / 2);
-      drawText(ctx, it.label, cx, ty, s, col, 'center', '#000');
-      if (it.sub) {
-        drawText(ctx, it.sub, cx, ty + 7 * s + 6, Math.max(1, s - 1), PAL.uiDim, 'center');
-      }
+      // gold accent bar on the left of the selected card
       if (seld) {
-        drawText(ctx, '▶', x + 10, iy + Math.round(itemH / 2) - 3 * s, s, PAL.gold, 'left');
+        ctx.fillStyle = PAL.goldHi;
+        ctx.fillRect(x, iy, 5, itemH);
       }
+      // icon
+      let textL = x + 16, textR = x + w - 16;
+      if (it.icon) {
+        const isz = Math.min(28, itemH - 16);
+        Art.uiIcon(ctx, it.icon, x + 16, iy + Math.round((itemH - isz) / 2), isz);
+        textL = x + 16 + isz + 14;
+      }
+      const col = it.disabled ? PAL.uiDim : (seld ? PAL.goldHi : PAL.ui);
+      const hasSub = !!it.sub;
+      const ty = iy + Math.round((itemH - (hasSub ? 7 * s + 5 + 7 : 7 * s)) / 2);
+      const tcx = it.icon ? textL : Math.round(x + w / 2);
+      const align = it.icon ? 'left' : 'center';
+      const maxW = it.icon ? textR - textL : w - 36;
+      drawTextFit(ctx, it.label, tcx, ty, maxW, s, col, align, '#000');
+      if (hasSub) {
+        drawTextFit(ctx, it.sub, tcx, ty + 7 * s + 7, maxW, 1, PAL.uiDim, align);
+      }
+      ctx.restore();
     }
   }
 }
@@ -180,16 +212,16 @@ const ScreenMenu = {
     const started = all.some(l => Save.isLevelDone(l.id));
     if (next && started) {
       items.push({
-        label: 'CONTINUE', sub: next.id + ' ' + next.name,
+        label: 'CONTINUE', sub: next.id + ' ' + next.name, icon: 'play',
         action: () => App.setScreen('game', { levelId: next.id }),
       });
     }
     items.push(
-      { label: 'STORY', sub: next ? 'THE SUNKEN KEEP' : 'THE KEEP SHINES AGAIN', action: () => App.setScreen('story') },
-      { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', action: () => App.setScreen('challenge') },
-      { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', action: () => App.setScreen('timed') },
-      { label: 'SHOP', sub: 'SPEND YOUR COINS', action: () => App.setScreen('shop') },
-      { label: 'SETTINGS', action: () => App.setScreen('settings') },
+      { label: 'STORY', sub: next ? 'THE SUNKEN KEEP' : 'THE KEEP SHINES AGAIN', icon: 'sword', action: () => App.setScreen('story') },
+      { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', icon: 'depth', action: () => App.setScreen('challenge') },
+      { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', icon: 'clock', action: () => App.setScreen('timed') },
+      { label: 'SHOP', sub: 'SPEND YOUR COINS', icon: 'cart', action: () => App.setScreen('shop') },
+      { label: 'SETTINGS', icon: 'gear', action: () => App.setScreen('settings') },
     );
     this.list = new MenuList(items);
   },
@@ -197,10 +229,16 @@ const ScreenMenu = {
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 220));
-    drawText(ctx, 'DELVE', W / 2, 42, s + 2, PAL.goldHi, 'center', '#3a2808');
-    coinsBadge(ctx, W - 16, 20, Save.data.coins, Math.max(2, s - 1));
-    const iw = Math.min(W - 48, 340);
-    this.list.draw(ctx, W / 2, Math.max(110, H * 0.17), iw, 32 + s * 12, s);
+    const ts = s + 2;
+    drawText(ctx, 'DELVE', W / 2, 38, ts, PAL.goldHi, 'center', '#3a2808');
+    // animated gold underline
+    const ease = 1 - Math.pow(1 - Math.min(1, this.t / 0.45), 3);
+    const uw = Math.round(textWidth('DELVE', ts) * ease);
+    ctx.fillStyle = PAL.gold;
+    ctx.fillRect(Math.round(W / 2 - uw / 2), 38 + 8 * ts + 4, uw, 3);
+    coinsBadge(ctx, W - 16, 16, Save.data.coins, Math.max(2, s - 1));
+    const iw = Math.min(W - 40, 360);
+    this.list.draw(ctx, W / 2, Math.max(112, H * 0.16), iw, 30 + s * 12, s, this.t);
   },
   onDirPress(dc, dr) { if (dr) this.list.nav(dr); },
   onDirRelease() {},
@@ -253,10 +291,10 @@ const ScreenStory = {
     const prog = chapterProgress(ch, Save);
     const allDone = allStoryLevels().every(l => Save.isLevelDone(l.id));
 
-    // chapter header with pager arrows
-    drawText(ctx, ch.name, W / 2, 34, s + 1, unlocked ? PAL.goldHi : PAL.uiDim, 'center', '#000');
-    drawText(ctx, allDone ? 'THE KEEP SHINES AGAIN.' : ch.tagline, W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
-    drawText(ctx, (this.chIdx + 1) + '/' + STORY.chapters.length + '  ·  ' + prog.done + '/' + prog.total + ' CLEAR',
+    // chapter header with pager arrows (title fitted between them)
+    drawTextFit(ctx, ch.name, W / 2, 34, W - 132, s + 1, unlocked ? PAL.goldHi : PAL.uiDim, 'center', '#000');
+    drawTextFit(ctx, allDone ? 'THE KEEP SHINES AGAIN.' : ch.tagline, W / 2, 34 + 8 * (s + 1) + 6, W - 24, 1, PAL.uiDim, 'center');
+    drawText(ctx, (this.chIdx + 1) + '/' + STORY.chapters.length + ' · ' + prog.done + '/' + prog.total + ' CLEAR',
       W / 2, 34 + 8 * (s + 1) + 20, 1, PAL.uiDim, 'center');
     this.arrows = [];
     if (this.chIdx > 0) {
@@ -285,8 +323,11 @@ const ScreenStory = {
       const done = Save.isLevelDone(lv.id);
       const lvUnlocked = isLevelUnlocked(lv.id, Save);
       const seld = i === this.sel;
-      ctx.fillStyle = seld ? 'rgba(210,160,40,0.15)' : 'rgba(255,255,255,0.05)';
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x + 3, y + 3, cell, cell);
+      ctx.fillStyle = seld ? '#161226' : '#0d1120';
       ctx.fillRect(x, y, cell, cell);
+      if (seld) { ctx.fillStyle = 'rgba(210,160,40,0.10)'; ctx.fillRect(x, y, cell, cell); }
       ctx.fillStyle = seld ? PAL.gold : (done ? 'rgba(210,160,40,0.4)' : 'rgba(255,255,255,0.12)');
       ctx.fillRect(x, y, cell, 2); ctx.fillRect(x, y + cell - 2, cell, 2);
       ctx.fillRect(x, y, 2, cell); ctx.fillRect(x + cell - 2, y, 2, cell);
@@ -311,7 +352,7 @@ const ScreenStory = {
       const rows = Math.ceil(lvls.length / perRow);
       const infoY = gy + rows * (cell + 10) + 12;
       const showName = isLevelUnlocked(selLv.id, Save);
-      drawText(ctx, showName ? selLv.name : '???', W / 2, infoY, s, PAL.ui, 'center', '#000');
+      drawTextFit(ctx, showName ? selLv.name : '???', W / 2, infoY, W - 24, s, PAL.ui, 'center', '#000');
     }
     // relics owned
     const items = Object.keys(Save.data.story.items);
@@ -408,8 +449,8 @@ const ScreenSettings = {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 240));
     drawText(ctx, 'SETTINGS', W / 2, 40, s + 1, PAL.goldHi, 'center', '#000');
-    const iw = Math.min(W - 48, 360);
-    this.list.draw(ctx, W / 2, Math.max(100, H * 0.16), iw, 30 + s * 10, s);
+    const iw = Math.min(W - 40, 360);
+    this.list.draw(ctx, W / 2, Math.max(100, H * 0.16), iw, 30 + s * 10, s, this.t);
     drawText(ctx, 'DELVE V1.0', W / 2, H - 30, 1, PAL.uiDim, 'center');
   },
   onDirPress(dc, dr) { if (dr) { this.list.nav(dr); this.confirmingWipe = false; this._sel = this.list.sel; this._rebuild(); } },

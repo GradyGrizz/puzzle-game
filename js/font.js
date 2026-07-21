@@ -63,6 +63,7 @@ const FONT_GLYPHS = {
   '=':[0,0,0x1F,0,0x1F,0,0],
   '~':[0,0,0x08,0x15,0x02,0,0],
   '×':[0,0x11,0x0A,0x04,0x0A,0x11,0],       // ×
+  '·':[0,0,0x0C,0x0C,0,0,0],                // ·
   '♥':[0,0x0A,0x1F,0x1F,0x0E,0x04,0],       // ♥
   '★':[0x04,0x04,0x1F,0x0E,0x0A,0x11,0],    // ★
   '▲':[0,0x04,0x0E,0x1F,0,0,0],             // ▲
@@ -106,6 +107,18 @@ function drawTextRaw(ctx, str, x, y, s, color) {
     }
     cx += (FONT_W + FONT_SP) * s;
   }
+}
+
+// Draw text no wider than maxW: shrink the scale first, then
+// truncate with '...' if scale 1 still overflows. Returns width.
+function drawTextFit(ctx, str, x, y, maxW, s, color, align, shadow) {
+  str = String(str);
+  while (s > 1 && textWidth(str, s) > maxW) s--;
+  if (textWidth(str, s) > maxW) {
+    while (str.length > 1 && textWidth(str + '...', s) > maxW) str = str.slice(0, -1);
+    str += '...';
+  }
+  return drawText(ctx, str, x, y, s, color, align, shadow);
 }
 
 // Word-wrap text into lines that fit maxWidth at scale s

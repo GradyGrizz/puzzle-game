@@ -22,8 +22,8 @@ function fmtDate(ts) {
 function drawModeScreen(self, ctx, W, H, opts) {
   drawBackdrop(ctx, W, H, self.t);
   const s = Math.max(2, Math.floor(W / 220));
-  drawText(ctx, opts.title, W / 2, 34, s + 1, PAL.goldHi, 'center', '#000');
-  drawText(ctx, opts.tagline, W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
+  drawTextFit(ctx, opts.title, W / 2, 34, W - 24, s + 1, PAL.goldHi, 'center', '#000');
+  drawTextFit(ctx, opts.tagline, W / 2, 34 + 8 * (s + 1) + 6, W - 24, 1, PAL.uiDim, 'center');
   coinsBadge(ctx, W - 16, 12, Save.data.coins, Math.max(1, s - 1));
   drawText(ctx, '◀ BACK', 16, 12, s, PAL.uiDim, 'left');
 
@@ -33,7 +33,7 @@ function drawModeScreen(self, ctx, W, H, opts) {
 
   // best banner
   Art.panel(ctx, px, py, pw, 46);
-  drawText(ctx, opts.bestLabel, W / 2, py + 16, s, PAL.goldHi, 'center');
+  drawTextFit(ctx, opts.bestLabel, W / 2, py + 16, pw - 28, s, PAL.goldHi, 'center');
   py += 62;
 
   // leaderboard
@@ -48,14 +48,14 @@ function drawModeScreen(self, ctx, W, H, opts) {
   }
   for (let i = 0; i < rows.length; i++) {
     const col = i === 0 ? PAL.goldHi : PAL.ui;
-    drawText(ctx, (i + 1) + '.', px + 18, ty, s - 0, col, 'left');
-    drawText(ctx, rows[i].main, px + 52, ty, s - 0, col, 'left');
+    drawText(ctx, (i + 1) + '.', px + 18, ty, s, col, 'left');
+    drawTextFit(ctx, rows[i].main, px + 52, ty, pw - 130, s, col, 'left');
     drawText(ctx, rows[i].right, px + pw - 16, ty, 1, PAL.uiDim, 'right');
     ty += lh;
   }
   py += lbH + 16;
 
-  self.list.draw(ctx, W / 2, py, Math.min(W - 60, 300), 46, s);
+  self.list.draw(ctx, W / 2, py, Math.min(W - 48, 320), 46, s, self.t);
 }
 
 // ══ CHALLENGE ═════════════════════════════════════════════════

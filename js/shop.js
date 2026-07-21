@@ -173,11 +173,15 @@ const ScreenShop = {
       }
       const seld = i === this.sel;
       const state = this._rowState(row);
-      ctx.fillStyle = seld ? 'rgba(210,160,40,0.13)' : 'rgba(255,255,255,0.045)';
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(px + 4, y + 4, pw, h);
+      ctx.fillStyle = seld ? '#161226' : '#0d1120';
       ctx.fillRect(px, y, pw, h);
+      if (seld) { ctx.fillStyle = 'rgba(210,160,40,0.08)'; ctx.fillRect(px, y, pw, h); }
       ctx.fillStyle = seld ? PAL.gold : 'rgba(255,255,255,0.1)';
       ctx.fillRect(px, y, pw, 2); ctx.fillRect(px, y + h - 2, pw, 2);
       ctx.fillRect(px, y, 2, h); ctx.fillRect(px + pw - 2, y, 2, h);
+      if (seld) { ctx.fillStyle = PAL.goldHi; ctx.fillRect(px, y, 5, h); }
 
       // preview swatch
       const ps = h - 16;
@@ -209,14 +213,7 @@ const ScreenShop = {
         Art.coinIcon(ctx, ix + 4, iy + 4, ps - 10);
       }
 
-      const tx = ix + ps + 12;
-      drawText(ctx, row.name, tx, y + 10, s, seld ? PAL.goldHi : PAL.ui, 'left');
-      if (row.desc) drawText(ctx, row.desc, tx, y + 10 + 9 * s, 1, PAL.uiDim, 'left');
-      if (row.kind === 'ad') {
-        drawText(ctx, Save.adsLeftToday() + ' LEFT TODAY', tx, y + 10 + 9 * s + 12, 1, PAL.uiDim, 'left');
-      }
-
-      // right-side status
+      // right-side status (computed first so the name can't collide)
       let label, col = PAL.ui;
       if (this.confirmId === row.id) { label = 'TAP: -' + row.price; col = PAL.goldHi; }
       else if (state === 'equipped') { label = 'EQUIPPED'; col = PAL.goldHi; }
@@ -225,14 +222,25 @@ const ScreenShop = {
       else if (state === 'iap') { label = ''; }
       else if (row.kind === 'ad') { label = 'FREE'; col = PAL.goldHi; }
       else { label = '● ' + row.price; col = Save.data.coins >= row.price ? PAL.goldHi : PAL.red; }
+      const statusS = pw < 330 ? 1 : s;
+      let statusW = 0;
       if (label) {
         if (label.startsWith('● ')) {
-          const wTxt = textWidth(label.slice(2), s);
+          const wTxt = textWidth(label.slice(2), statusS);
           Art.coinIcon(ctx, px + pw - 16 - wTxt - 12, y + h / 2 - 4, 8);
-          drawText(ctx, label.slice(2), px + pw - 16, y + h / 2 - 6, s, col, 'right');
+          drawText(ctx, label.slice(2), px + pw - 16, y + h / 2 - 6, statusS, col, 'right');
+          statusW = wTxt + 24;
         } else {
-          drawText(ctx, label, px + pw - 16, y + h / 2 - 6, s, col, 'right');
+          statusW = drawTextFit(ctx, label, px + pw - 16, y + h / 2 - 6, 120, statusS, col, 'right') + 8;
         }
+      }
+
+      const tx = ix + ps + 12;
+      const nameMax = (px + pw - 16 - statusW) - tx - 6;
+      drawTextFit(ctx, row.name, tx, y + 10, nameMax, s, seld ? PAL.goldHi : PAL.ui, 'left');
+      if (row.desc) drawTextFit(ctx, row.desc, tx, y + 10 + 9 * s, nameMax, 1, PAL.uiDim, 'left');
+      if (row.kind === 'ad') {
+        drawText(ctx, Save.adsLeftToday() + ' LEFT TODAY', tx, y + 10 + 9 * s + 12, 1, PAL.uiDim, 'left');
       }
     }
     ctx.restore();

@@ -509,16 +509,68 @@ hero(ctx, dir, frame, px, py, tile, pushing) {
 },
 
 // ── UI chrome ────────────────────────────────────────────────
+// sharp modern-retro card: opaque body + hard pixel drop shadow
 panel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(4,5,10,0.92)';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(x + 5, y + 5, w, h);
+  ctx.fillStyle = '#0b0e1a';
   ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = PAL.wHi;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y + h - 2, w, 2);
   ctx.fillRect(x, y, 2, h); ctx.fillRect(x + w - 2, y, 2, h);
   ctx.fillStyle = PAL.gold;
-  ctx.fillRect(x, y, 6, 2); ctx.fillRect(x, y, 2, 6);
-  ctx.fillRect(x + w - 6, y, 6, 2); ctx.fillRect(x + w - 2, y, 2, 6);
-  ctx.fillRect(x, y + h - 2, 6, 2); ctx.fillRect(x, y + h - 6, 2, 6);
-  ctx.fillRect(x + w - 6, y + h - 2, 6, 2); ctx.fillRect(x + w - 2, y + h - 6, 2, 6);
+  ctx.fillRect(x, y, 8, 2); ctx.fillRect(x, y, 2, 8);
+  ctx.fillRect(x + w - 8, y, 8, 2); ctx.fillRect(x + w - 2, y, 2, 8);
+  ctx.fillRect(x, y + h - 2, 8, 2); ctx.fillRect(x, y + h - 8, 2, 8);
+  ctx.fillRect(x + w - 8, y + h - 2, 8, 2); ctx.fillRect(x + w - 2, y + h - 8, 2, 8);
+},
+
+// small pixel glyphs for menu cards
+uiIcon(ctx, name, x, y, size) {
+  const u = Math.max(1, Math.floor(size / 12));
+  if (name === 'play') {
+    ctx.fillStyle = PAL.goldHi;
+    for (let i = 0; i < 6; i++) ctx.fillRect(x + i * u, y + i * u, u, (12 - i * 2) * u);
+  } else if (name === 'sword') {
+    this.item(ctx, 'sword', x, y, size);
+  } else if (name === 'depth') {
+    // stairs descending into dark
+    ctx.fillStyle = '#3c4c66';
+    ctx.fillRect(x, y, u * 4, u * 3);
+    ctx.fillStyle = '#2c3a52';
+    ctx.fillRect(x + u * 4, y + u * 3, u * 4, u * 3);
+    ctx.fillStyle = '#1c2638';
+    ctx.fillRect(x + u * 8, y + u * 6, u * 4, u * 3);
+    ctx.fillStyle = PAL.goldHi;
+    ctx.fillRect(x + u * 9, y + u * 10, u * 2, u * 2);
+  } else if (name === 'clock') {
+    ctx.fillStyle = '#3c4c66';
+    ctx.fillRect(x + u * 3, y, u * 6, u); ctx.fillRect(x + u * 3, y + u * 11, u * 6, u);
+    ctx.fillRect(x, y + u * 3, u, u * 6); ctx.fillRect(x + u * 11, y + u * 3, u, u * 6);
+    ctx.fillRect(x + u, y + u, u * 2, u * 2); ctx.fillRect(x + u * 9, y + u, u * 2, u * 2);
+    ctx.fillRect(x + u, y + u * 9, u * 2, u * 2); ctx.fillRect(x + u * 9, y + u * 9, u * 2, u * 2);
+    ctx.fillStyle = PAL.goldHi;
+    ctx.fillRect(x + u * 5, y + u * 3, u * 2, u * 4);
+    ctx.fillRect(x + u * 6, y + u * 6, u * 3, u * 2);
+  } else if (name === 'coin') {
+    this.coinIcon(ctx, x + u, y + u, size - u * 2);
+  } else if (name === 'gear') {
+    ctx.fillStyle = '#3c4c66';
+    ctx.fillRect(x + u * 5, y, u * 2, u * 12);
+    ctx.fillRect(x, y + u * 5, u * 12, u * 2);
+    ctx.fillRect(x + u * 2, y + u * 2, u * 8, u * 8);
+    ctx.fillStyle = '#0b0e1a';
+    ctx.fillRect(x + u * 5, y + u * 5, u * 2, u * 2);
+  } else if (name === 'cart') {
+    ctx.fillStyle = '#3c4c66';
+    ctx.fillRect(x, y + u * 2, u * 2, u);
+    ctx.fillRect(x + u * 2, y + u * 2, u, u * 6);
+    ctx.fillRect(x + u * 2, y + u * 8, u * 9, u);
+    ctx.fillRect(x + u * 3, y + u * 3, u * 8, u * 4);
+    ctx.fillRect(x + u * 3, y + u * 10, u * 2, u * 2);
+    ctx.fillRect(x + u * 8, y + u * 10, u * 2, u * 2);
+    ctx.fillStyle = PAL.goldHi;
+    ctx.fillRect(x + u * 4, y + u * 4, u * 6, u * 2);
+  }
 },
 };

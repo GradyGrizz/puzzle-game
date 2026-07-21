@@ -59,6 +59,7 @@ const ScreenGame = {
     this._awarded = false;
     this.hintPath = null;
     this.pauseList = null;
+    this.uiT = 0;
     Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
     // hint scrolls work on story levels (small enough to solve live)
     const hintBtn = document.getElementById('btn-hint');
@@ -243,6 +244,7 @@ const ScreenGame = {
   _pause() {
     Snd.back();
     this.mode = 'paused';
+    this.uiT = 0;
     this._buildPauseList();
   },
   _buildPauseList(keepSel) {
@@ -346,14 +348,15 @@ const ScreenGame = {
     const items = [];
     if (next) items.push({ label: 'NEXT LEVEL', action: () => App.setScreen('game', { levelId: next.id }) });
     items.push({ label: 'LEVEL SELECT', action: () => App.setScreen('story') });
-    let coinLine = 'COINS +' + coins;
-    if (first) coinLine += ' (FIRST CLEAR +10)';
+    const lines = ['MOVES: ' + this.state.moves, 'COINS +' + coins];
+    if (first) lines.push('FIRST CLEAR BONUS +10');
     this.resultInfo = {
       title: 'LEVEL CLEAR', sub: this.lv.name,
-      lines: ['MOVES: ' + this.state.moves, coinLine],
+      lines,
       list: new MenuList(items),
     };
     this.mode = 'results';
+    this.uiT = 0;
   },
 
   _challengeClear() {
@@ -378,6 +381,7 @@ const ScreenGame = {
       ]),
     };
     this.mode = 'results';
+    this.uiT = 0;
   },
 
   _recordChallenge() {
@@ -401,6 +405,7 @@ const ScreenGame = {
       ]),
     };
     this.mode = 'runover';
+    this.uiT = 0;
   },
 
   _timedClear() {
@@ -420,6 +425,7 @@ const ScreenGame = {
         ]),
       };
       this.mode = 'results';
+      this.uiT = 0;
       // auto-advance keeps the rush feeling
       this._autoNext = 1.1;
     } else {
@@ -435,12 +441,14 @@ const ScreenGame = {
         ]),
       };
       this.mode = 'results';
+      this.uiT = 0;
     }
   },
 
   // ── update ──
   update(dt) {
     this.t += dt;
+    this.uiT += dt;
     if (this.toast) { this.toast.t -= dt; if (this.toast.t <= 0) this.toast = null; }
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.2);
     if (this.exitGlow > 0) this.exitGlow = Math.max(0, this.exitGlow - dt * 0.4);
@@ -622,12 +630,17 @@ const ScreenGame = {
     this.drawHud(ctx, W, H, hudH);
 
     if (this.toast) {
-      const s = 2;
-      const tw = textWidth(this.toast.text, s) + 24;
+      let s = 2;
+      while (s > 1 && textWidth(this.toast.text, s) > W - 40) s--;
+      const tw = Math.min(W - 16, textWidth(this.toast.text, s) + 24);
       const tx = (W - tw) / 2, ty = by - 4;
-      ctx.fillStyle = 'rgba(4,5,10,0.9)';
-      ctx.fillRect(tx, ty, tw, 24);
-      drawText(ctx, this.toast.text, W / 2, ty + 6, s, PAL.goldHi, 'center');
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(tx + 3, ty + 3, tw, 26);
+      ctx.fillStyle = '#0b0e1a';
+      ctx.fillRect(tx, ty, tw, 26);
+      ctx.fillStyle = PAL.gold;
+      ctx.fillRect(tx, ty, tw, 2);
+      drawTextFit(ctx, this.toast.text, W / 2, ty + 8, tw - 16, s, PAL.goldHi, 'center');
     }
 
     if (this.mode === 'dialog') this.drawDialog(ctx, W, H);
@@ -648,9 +661,12 @@ const ScreenGame = {
     const s = Math.max(2, Math.floor(W / 240));
     const pw = Math.min(W - 48, 340), ph = 330;
     const px = (W - pw) / 2, py = Math.max(30, H * 0.13);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, this.uiT / 0.12);
     Art.panel(ctx, px, py, pw, ph);
     drawText(ctx, 'PAUSED', W / 2, py + 20, s + 1, PAL.goldHi, 'center', '#000');
-    this.pauseList.draw(ctx, W / 2, py + 64, pw - 48, 42, s);
+    ctx.restore();
+    this.pauseList.draw(ctx, W / 2, py + 64, pw - 48, 42, s, this.uiT);
   },
 
   drawHud(ctx, W, H, hudH) {
@@ -659,7 +675,9 @@ const ScreenGame = {
     ctx.fillStyle = PAL.uiDark; ctx.fillRect(0, hudH - 1, W, 1);
     drawText(ctx, '◀', 16, 16, 2, PAL.uiDim, 'left');
     const title = this.gameMode === 'story' ? this.levelId + ' ' + this.lv.name : this.levelId;
-    drawText(ctx, title, W / 2, 10, 2, PAL.ui, 'center', '#000');
+    // center in the free span between the back button and coins/keys
+    const spanL = 38, spanR = W - (this.state.keys > 0 ? 150 : 108);
+    drawTextFit(ctx, title, (spanL + spanR) / 2, 10, spanR - spanL - 6, 2, PAL.ui, 'center', '#000');
     if (this.gameMode === 'challenge') {
       const left = this.movesLeft();
       const urgent = left != null && left <= 5;
@@ -678,7 +696,7 @@ const ScreenGame = {
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');
     }
     if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6) {
-      drawText(ctx, this.lv.hint, W / 2, hudH + 6, 1, PAL.gold, 'center', '#000');
+      drawTextFit(ctx, this.lv.hint, W / 2, hudH + 6, W - 16, 1, PAL.gold, 'center', '#000');
     }
   },
 
@@ -741,16 +759,19 @@ const ScreenGame = {
     const s = Math.max(2, Math.floor(W / 240));
     const pw = Math.min(W - 32, 420), ph = 310;
     const px = (W - pw) / 2, py = Math.max(30, H * 0.14);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, this.uiT / 0.15);
     Art.panel(ctx, px, py, pw, ph);
     const titleCol = this.mode === 'runover' ? PAL.red : PAL.goldHi;
-    drawText(ctx, ri.title, W / 2, py + 20, s + 1, titleCol, 'center', '#000');
-    if (ri.sub) drawText(ctx, ri.sub, W / 2, py + 20 + 9 * (s + 1), Math.max(1, s - 1), PAL.uiDim, 'center');
+    drawTextFit(ctx, ri.title, W / 2, py + 20, pw - 28, s + 1, titleCol, 'center', '#000');
+    if (ri.sub) drawTextFit(ctx, ri.sub, W / 2, py + 20 + 9 * (s + 1), pw - 28, Math.max(1, s - 1), PAL.uiDim, 'center');
     let ty = py + 84;
     for (const ln of ri.lines) {
-      if (ln) drawText(ctx, ln, W / 2, ty, s, ln.includes('NEW') ? PAL.goldHi : PAL.ui, 'center');
+      if (ln) drawTextFit(ctx, ln, W / 2, ty, pw - 32, s, ln.includes('NEW') ? PAL.goldHi : PAL.ui, 'center');
       ty += 11 * s;
     }
-    ri.list.draw(ctx, W / 2, py + ph - 122, pw - 60, 44, s);
+    ctx.restore();
+    ri.list.draw(ctx, W / 2, py + ph - 122, pw - 60, 44, s, this.uiT);
   },
 };
 
