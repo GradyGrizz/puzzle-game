@@ -669,7 +669,10 @@ const ScreenGame = {
     } else {
       drawText(ctx, 'MOVES ' + this.state.moves, W / 2, 30, 1, PAL.uiDim, 'center');
     }
-    coinsBadge(ctx, W - 12, 14, Save.data.coins + (this.gameMode === 'story' ? this.state.coinsGot : 0), 2);
+    // during play, preview coins collected this level; after the award
+    // (results/runover) the save already includes them
+    const awarded = this.mode === 'results' || this.mode === 'runover' || this._awarded;
+    coinsBadge(ctx, W - 12, 14, Save.data.coins + (awarded ? 0 : this.state.coinsGot), 2);
     if (this.state.keys > 0) {
       Art.keyIcon(ctx, W - 110, 12, 16);
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');

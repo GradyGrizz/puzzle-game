@@ -396,6 +396,8 @@ const ScreenSettings = {
     Save.wipe();
     Snd.musicOn = Save.data.settings.music; Snd.sfxOn = Save.data.settings.sfx;
     Snd.applySettings();
+    Art.setSkin(Save.data.shop.skin);
+    Art.setTheme(Save.data.shop.theme);
     Snd.error();
     this.confirmingWipe = false;
     this._sel = 0;
