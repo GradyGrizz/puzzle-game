@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Dungeon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08090e">
+<title>Delve — Dungeon Puzzles</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -13,406 +16,82 @@ html, body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  font-family: monospace;
 }
 canvas {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0; top: 0;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
-.dpad {
+#controls {
   position: fixed;
-  bottom: 24px;
+  left: 0; right: 0; bottom: 0;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  display: none;
+  z-index: 10;
+  pointer-events: none;
+}
+body.in-game #controls { display: block; }
+.dpad {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: grid;
-  grid-template-columns: 64px 64px 64px;
-  grid-template-rows: 64px 64px 64px;
+  grid-template-columns: 58px 58px 58px;
+  grid-template-rows: 58px 58px 58px;
   gap: 5px;
-  z-index: 10;
+  pointer-events: auto;
 }
-.dp {
+.dp, .ab {
   background: rgba(255,255,255,0.07);
   border: 2px solid rgba(255,255,255,0.13);
-  border-radius: 14px;
-  color: rgba(255,255,255,0.4);
-  font-size: 22px;
+  border-radius: 13px;
+  color: rgba(255,255,255,0.42);
+  font-size: 20px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   -webkit-user-select: none;
   transition: background 0.07s, border-color 0.07s, color 0.07s;
 }
-.dp:active {
+.dp:active, .ab:active {
   background: rgba(200,160,40,0.2);
   border-color: rgba(210,170,50,0.55);
   color: rgba(230,190,60,0.9);
 }
+.acts {
+  position: absolute;
+  bottom: max(30px, env(safe-area-inset-bottom));
+  right: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: auto;
+}
+.ab { width: 58px; height: 46px; font-size: 12px; letter-spacing: 1px; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div class="dpad">
-  <div></div><div class="dp" id="dp-up">▲</div><div></div>
-  <div class="dp" id="dp-left">◀</div><div></div><div class="dp" id="dp-right">▶</div>
-  <div></div><div class="dp" id="dp-down">▼</div><div></div>
+<div id="controls">
+  <div class="dpad">
+    <div></div><div class="dp" id="dp-up" aria-label="Up">&#9650;</div><div></div>
+    <div class="dp" id="dp-left" aria-label="Left">&#9664;</div><div></div><div class="dp" id="dp-right" aria-label="Right">&#9654;</div>
+    <div></div><div class="dp" id="dp-down" aria-label="Down">&#9660;</div><div></div>
+  </div>
+  <div class="acts">
+    <div class="ab" id="btn-undo" aria-label="Undo">UNDO</div>
+    <div class="ab" id="btn-reset" aria-label="Reset">RESET</div>
+  </div>
 </div>
-<script>
-'use strict';
-
-const canvas = document.getElementById('c');
-const ctx    = canvas.getContext('2d');
-
-// ── Tile IDs ─────────────────────────────────────────────────
-const WALL=0,FLOOR=1,DOOR_N=2,DOOR_SL=3,DOOR_SO=4,SW=5,BLOCK=6,BLOCK_SW=7;
-const COLS=11, ROWS=9;
-
-function initRoom() {
-  return [
-    [0,0,0,0,0,2,0,0,0,0,0],
-    [0,1,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,6,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,5,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,1,0],
-    [0,0,0,0,0,3,0,0,0,0,0],
-  ];
-}
-
-let room   = initRoom();
-let solved = false;
-let flash  = 0;
-
-// ── Sizing ───────────────────────────────────────────────────
-let TILE, CW, CH;
-function resize() {
-  const dpr    = window.devicePixelRatio || 1;
-  const dpadH  = 220;
-  const avail  = window.innerHeight - dpadH;
-  TILE = Math.floor(Math.min(window.innerWidth / COLS, avail / ROWS));
-  CW   = TILE * COLS;
-  CH   = TILE * ROWS;
-  // physical pixels = logical × dpr for sharp rendering on HiDPI screens
-  canvas.width  = CW * dpr;
-  canvas.height = CH * dpr;
-  canvas.style.width  = CW + 'px';
-  canvas.style.height = CH + 'px';
-  canvas.style.top = Math.max(6, (avail - CH) / 2) + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-}
-window.addEventListener('resize', resize);
-
-// ── Palette (ALTTP dungeon) ───────────────────────────────────
-const C = {
-  bg:   '#08090e',
-  fl:   '#1c2232', flG: '#121828', flD: '#22283e',
-  wBg:  '#070810', wFace:'#162030', wHi:'#263444',
-  wSh:  '#04050a', wMid:'#1a2838',
-  dFrm: '#40301c', dPass:'#040508',
-  swPl: '#b83818', swBtn:'#d84820', swAPl:'#d85f20', swABtn:'#f07030',
-  blF:  '#1a2440', blH:'#263450',  blSh:'#0c1020',
-};
-
-// ── Tile drawers ──────────────────────────────────────────────
-function tFloor(x,y,t) {
-  ctx.fillStyle=C.fl; ctx.fillRect(x,y,t,t);
-  ctx.fillStyle=C.flG; ctx.fillRect(x,y,t,1); ctx.fillRect(x,y,1,t);
-  const d=Math.floor(t*.22);
-  ctx.fillStyle=C.flD;
-  ctx.fillRect(x+d,y+d,2,2); ctx.fillRect(x+t-d-2,y+t-d-2,2,2);
-}
-function tWall(x,y,t) {
-  ctx.fillStyle=C.wBg; ctx.fillRect(x,y,t,t);
-  ctx.fillStyle=C.wFace; ctx.fillRect(x+1,y+1,t-2,t-2);
-  const h=Math.floor(t*.52);
-  ctx.fillStyle=C.wHi;
-  ctx.fillRect(x+2,y+2,t-4,2); ctx.fillRect(x+2,y+h+1,t-4,2);
-  ctx.fillStyle=C.wBg;
-  ctx.fillRect(x+1,y+h,t-2,2);
-  ctx.fillRect(x+Math.floor(t*.50),y+2,1,h-3);
-  ctx.fillRect(x+Math.floor(t*.25),y+h+2,1,t-h-4);
-  ctx.fillRect(x+Math.floor(t*.75),y+h+2,1,t-h-4);
-  ctx.fillStyle=C.wMid;
-  ctx.fillRect(x+2,y+2,Math.floor(t*.20),h-4);
-  ctx.fillRect(x+Math.floor(t*.27),y+h+2,Math.floor(t*.20),t-h-4);
-  ctx.fillStyle=C.wSh;
-  ctx.fillRect(x+t-1,y,1,t); ctx.fillRect(x,y+t-1,t,1);
-}
-function tDoorN(x,y,t) {
-  tFloor(x,y,t);
-  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
-  ctx.fillStyle=C.dPass; ctx.fillRect(x+3,y,t-6,t);
-}
-function tDoorSL(x,y,t) {
-  tFloor(x,y,t);
-  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
-  ctx.fillRect(x+3,y,t-6,3);
-  ctx.fillStyle='#1e1008'; ctx.fillRect(x+3,y+3,t-6,t-3);
-  const lx=x+Math.floor(t/2), ly=y+Math.floor(t*.32);
-  ctx.fillStyle='#7a5828';
-  ctx.fillRect(lx-2,ly,5,4); ctx.fillRect(lx-3,ly+3,7,5);
-  ctx.fillStyle='#4a3010'; ctx.fillRect(lx-1,ly+5,3,2);
-}
-function tDoorSO(x,y,t) {
-  tFloor(x,y,t);
-  ctx.fillStyle=C.dFrm; ctx.fillRect(x,y,3,t); ctx.fillRect(x+t-3,y,3,t);
-  ctx.fillStyle=C.dPass; ctx.fillRect(x+3,y,t-6,t);
-}
-function tSwitch(x,y,t,on) {
-  tFloor(x,y,t);
-  const s=Math.floor(t*.68),ox=x+Math.floor((t-s)/2),oy=y+Math.floor((t-s)/2);
-  ctx.fillStyle=on?C.swAPl:C.swPl; ctx.fillRect(ox,oy,s,s);
-  const is=Math.floor(s*.55),iox=ox+Math.floor((s-is)/2),ioy=oy+Math.floor((s-is)/2)+(on?1:0);
-  ctx.fillStyle=on?C.swABtn:C.swBtn; ctx.fillRect(iox,ioy,is,is);
-  ctx.fillStyle='rgba(255,255,255,0.18)';
-  ctx.fillRect(iox,ioy,is,2); ctx.fillRect(iox,ioy,2,is);
-  ctx.fillStyle='rgba(0,0,0,0.3)';
-  ctx.fillRect(iox,ioy+is-2,is,2); ctx.fillRect(iox+is-2,ioy,2,is);
-}
-function tBlock(x,y,t,glow) {
-  tFloor(x,y,t);
-  const p=Math.floor(t*.1),bs=t-p*2;
-  ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(x+p+2,y+p+2,bs,bs);
-  ctx.fillStyle=C.blF; ctx.fillRect(x+p,y+p,bs,bs);
-  const m=Math.floor(t/2);
-  ctx.fillStyle=C.blSh;
-  ctx.fillRect(x+m-1,y+p+3,2,bs-6); ctx.fillRect(x+p+3,y+m-1,bs-6,2);
-  ctx.fillStyle='rgba(255,255,255,0.06)';
-  ctx.fillRect(x+m,y+p+4,1,bs-7); ctx.fillRect(x+p+4,y+m,bs-7,1);
-  ctx.fillStyle=C.blH;
-  ctx.fillRect(x+p,y+p,bs,3); ctx.fillRect(x+p,y+p,3,bs);
-  ctx.fillStyle=C.blSh;
-  ctx.fillRect(x+p+bs-2,y+p,2,bs); ctx.fillRect(x+p,y+p+bs-2,bs,2);
-  if(glow){ctx.fillStyle='rgba(210,80,20,0.28)';ctx.fillRect(x+p,y+p+bs-5,bs,5);}
-}
-
-// ── Sprite sheets ─────────────────────────────────────────────
-// hero2.png: organized sheet with all 4 directions (1149x1369)
-// push_left.png: correct push-left strip (429x59)
-const WALK = {
-  up:    [[221,343,46,65],[339,343,48,65],[461,343,48,65],[578,343,48,65]],
-  down:  [[220,411,47,64],[341,411,46,64],[461,411,46,64],[580,411,47,64]],
-  left:  [[217,480,51,63],[337,480,52,63],[459,480,49,63],[577,480,50,63]],
-  right: [[222,551,49,64],[341,551,50,64],[461,551,49,64],[580,551,49,64]],
-};
-const PUSH = {
-  // no back-view push sprite in sheet — reuse walk-up frames (back view)
-  up:    [[221,343,46,65],[339,343,48,65],[461,343,48,65],[578,343,48,65]],
-  down:  [[220,727,45,64],[339,727,45,64],[459,727,45,64],[579,727,44,64]],
-  left:  [[70,2,54,51],[161,2,54,51],[254,2,54,51],[345,2,55,51]],
-  // sheet "UP" label = right-facing profile = correct for push-right
-  right: [[212,653,67,65],[332,653,65,65],[451,653,66,65],[570,653,66,65]],
-};
-
-const sheet = new Image();
-sheet.src = 'hero2.png';
-sheet.onload = () => draw();
-
-const pushLeftSheet = new Image();
-pushLeftSheet.src = 'push_left.png';
-
-function drawHero(dir, walkFrame, tileX, tileY, pushing) {
-  const frames = pushing ? PUSH[dir] : WALK[dir];
-  const [sx, sy, sw, sh] = frames[walkFrame % 4];
-  const src = (pushing && dir === 'left') ? pushLeftSheet : sheet;
-  if (!src.complete) return;
-  const dh = Math.round(TILE * 1.2);
-  const dw = Math.round(dh * sw / sh);
-  const dx = tileX + ((TILE - dw) >> 1);
-  const dy = tileY + TILE - dh;
-  ctx.save();
-  ctx.globalAlpha = 0.3;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.ellipse(tileX + TILE/2, tileY + TILE - 3, TILE*0.28, TILE*0.07, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
-}
-
-// ── Animation state ───────────────────────────────────────────
-const MOVE_FRAMES = 10;
-
-const p = {
-  col:5, row:2, dir:'down',
-  moving:false, frame:0,
-  fromCol:5, fromRow:2, toCol:5, toRow:2,
-  progress:0,
-  // block being pushed along
-  pushFrom:null, pushTo:null,
-  lastPushDir: null,
-};
-
-let inputQueue = null;
-let heldDir   = null; // {dc,dr} while key/button is held
-
-// ── Game loop ─────────────────────────────────────────────────
-let lastTime = 0;
-function loop(ts) {
-  requestAnimationFrame(loop);
-  // throttle to ~60fps
-  if (ts - lastTime < 14) return;
-  lastTime = ts;
-
-  if (p.moving) {
-    p.progress++;
-    p.frame = Math.floor(p.progress * 4 / MOVE_FRAMES);
-
-    if (p.progress >= MOVE_FRAMES) {
-      // snap
-      p.col = p.toCol; p.row = p.toRow;
-      p.moving = false; p.frame = 0;
-      // settle pushed block in room state
-      if (p.pushTo) {
-        const {fc,fr,tc,tr} = p.pushTo;
-        const dest = room[tr][tc];
-        room[tr][tc] = (dest===SW) ? BLOCK_SW : BLOCK;
-        room[fr][fc] = (room[fr][fc]===BLOCK_SW) ? SW : FLOOR;
-        p.lastPushDir = p.dir;
-        p.pushFrom=null; p.pushTo=null;
-        if (!solved) checkWin();
-      }
-      // consume queued input, then fall back to held direction
-      if (inputQueue) {
-        const {dc,dr}=inputQueue; inputQueue=null;
-        tryMove(dc,dr);
-      } else if (heldDir) {
-        tryMove(heldDir.dc, heldDir.dr);
-      }
-    }
-    draw();
-  }
-
-  if (flash > 0) { flash=Math.max(0,flash-0.04); draw(); }
-}
-
-// ── Draw ──────────────────────────────────────────────────────
-function draw() {
-  ctx.fillStyle=C.bg; ctx.fillRect(0,0,CW,CH);
-
-  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
-    const x=c*TILE, y=r*TILE, t=room[r][c];
-    if      (t===WALL)    tWall(x,y,TILE);
-    else if (t===FLOOR)   tFloor(x,y,TILE);
-    else if (t===DOOR_N)  tDoorN(x,y,TILE);
-    else if (t===DOOR_SL) tDoorSL(x,y,TILE);
-    else if (t===DOOR_SO) tDoorSO(x,y,TILE);
-    else if (t===SW)      tSwitch(x,y,TILE,false);
-    else if (t===BLOCK)   tBlock(x,y,TILE,false);
-    else if (t===BLOCK_SW)tBlock(x,y,TILE,true);
-  }
-
-  // draw pushed block mid-animation
-  if (p.moving && p.pushFrom && p.pushTo) {
-    const prog = p.progress / MOVE_FRAMES;
-    const bx = (p.pushTo.fc + (p.pushTo.tc - p.pushTo.fc)*prog)*TILE;
-    const by = (p.pushTo.fr + (p.pushTo.tr - p.pushTo.fr)*prog)*TILE;
-    tBlock(Math.round(bx), Math.round(by), TILE, false);
-  }
-
-  // draw Link interpolated
-  let drawX, drawY;
-  if (p.moving) {
-    const prog = p.progress / MOVE_FRAMES;
-    drawX = Math.round((p.fromCol + (p.toCol-p.fromCol)*prog)*TILE);
-    drawY = Math.round((p.fromRow + (p.toRow-p.fromRow)*prog)*TILE);
-  } else {
-    drawX = p.col*TILE; drawY = p.row*TILE;
-  }
-  const isPushing = (p.moving && !!p.pushTo) || !!p.lastPushDir;
-  drawHero(p.lastPushDir || p.dir, p.frame, drawX, drawY, isPushing);
-
-  if (flash>0) {
-    ctx.fillStyle=`rgba(240,180,40,${flash*0.18})`;
-    ctx.fillRect(0,0,CW,CH);
-  }
-}
-
-// ── Logic ─────────────────────────────────────────────────────
-function checkWin() {
-  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
-    if (room[r][c]===BLOCK_SW) {
-      room[8][5]=DOOR_SO; solved=true; flash=1; return;
-    }
-  }
-}
-
-function tryMove(dc,dr) {
-  p.lastPushDir = null;
-  const nc=p.col+dc, nr=p.row+dr;
-  if (nc<0||nc>=COLS||nr<0||nr>=ROWS) return;
-  const tile=room[nr][nc];
-  const dir = dc<0?'left':dc>0?'right':dr<0?'up':'down';
-  p.dir=dir;
-
-  if (tile===WALL||tile===DOOR_SL) { draw(); return; }
-
-  let pushing = false;
-  if (tile===BLOCK||tile===BLOCK_SW) {
-    const bc=nc+dc, br=nr+dr;
-    if (bc<0||bc>=COLS||br<0||br>=ROWS) return;
-    const behind=room[br][bc];
-    if (behind!==FLOOR&&behind!==SW) return;
-    // mark the block as "in transit" — keep it in room for collision but
-    // record the push so we can draw it smoothly and settle at end
-    p.pushFrom={fc:nc,fr:nr};
-    p.pushTo={fc:nc,fr:nr,tc:bc,tr:br};
-    pushing=true;
-  }
-
-  p.fromCol=p.col; p.fromRow=p.row;
-  p.toCol=nc; p.toRow=nr;
-  p.progress=0; p.frame=1; p.moving=true;
-}
-
-// ── D-pad input ───────────────────────────────────────────────
-const DIRS = {
-  'dp-up':   [0,-1], 'dp-down': [0,1],
-  'dp-left': [-1,0], 'dp-right':[1,0],
-};
-Object.entries(DIRS).forEach(([id,[dc,dr]])=>{
-  const btn=document.getElementById(id);
-  const onPress=()=>{
-    heldDir={dc,dr};
-    if (!p.moving) tryMove(dc,dr);
-    else           inputQueue={dc,dr};
-  };
-  const onRelease=()=>{
-    if (heldDir && heldDir.dc===dc && heldDir.dr===dr) heldDir=null;
-  };
-  btn.addEventListener('touchstart', e=>{e.preventDefault();onPress();},{passive:false});
-  btn.addEventListener('touchend',   e=>{e.preventDefault();onRelease();},{passive:false});
-  btn.addEventListener('touchcancel',e=>{e.preventDefault();onRelease();},{passive:false});
-  btn.addEventListener('mousedown',  onPress);
-  btn.addEventListener('mouseup',    onRelease);
-  btn.addEventListener('mouseleave', onRelease);
-});
-
-// ── Keyboard input ────────────────────────────────────────────
-const KEY_DIRS = {
-  'ArrowUp':[0,-1],'ArrowDown':[0,1],'ArrowLeft':[-1,0],'ArrowRight':[1,0],
-};
-document.addEventListener('keydown', e=>{
-  const d = KEY_DIRS[e.key];
-  if (!d) return;
-  e.preventDefault();
-  if (e.repeat) return; // ignore OS auto-repeat; we handle hold ourselves
-  const [dc,dr] = d;
-  heldDir = {dc,dr};
-  if (!p.moving) tryMove(dc,dr);
-  else           inputQueue={dc,dr};
-});
-document.addEventListener('keyup', e=>{
-  const d = KEY_DIRS[e.key];
-  if (!d) return;
-  if (heldDir && heldDir.dc===d[0] && heldDir.dr===d[1]) heldDir=null;
-});
-
-resize();
-requestAnimationFrame(loop);
-</script>
+<script src="js/font.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/save.js"></script>
+<script src="js/art.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/screens.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>
