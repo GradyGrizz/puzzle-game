@@ -233,7 +233,11 @@ const ScreenGame = {
     else if (this.mode === 'chest') this._advanceChest();
     else if (this.mode === 'paused') this.pauseList.tapAt(x, y);
     else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.tapAt(x, y);
-    else if (y < 44 && x < 90) this.onBack();
+    else if (this._backBtn) {
+      const b = this._backBtn;
+      // generous hit slop around the pill
+      if (x >= b.x - 6 && x <= b.x + b.w + 8 && y >= b.y - 6 && y <= b.y + b.h + 6) this.onBack();
+    }
   },
   onBack() {
     if (this.mode === 'dialog') { this._advanceDialog(); return; }
@@ -511,7 +515,10 @@ const ScreenGame = {
     const st = this.state;
     const hudH = 48;
     const botH = App.isTouch ? 248 : 36;
-    const T = Math.max(8, Math.floor(Math.min((W - 8) / st.w, (H - hudH - botH) / st.h)));
+    // cap tile size so the board stays compact and proportionate to the
+    // controls instead of stretching edge-to-edge on big phones
+    const maxT = App.isTouch ? 30 : 40;
+    const T = Math.max(8, Math.min(maxT, Math.floor(Math.min((W - 8) / st.w, (H - hudH - botH) / st.h))));
     const bx = Math.floor((W - T * st.w) / 2);
     const by = hudH + Math.floor((H - hudH - botH - T * st.h) / 2);
     this._board = { bx, by, T };
@@ -673,10 +680,19 @@ const ScreenGame = {
     ctx.fillStyle = 'rgba(4,5,10,0.8)';
     ctx.fillRect(0, 0, W, hudH);
     ctx.fillStyle = PAL.uiDark; ctx.fillRect(0, hudH - 1, W, 1);
-    drawText(ctx, '◀', 16, 16, 2, PAL.uiDim, 'left');
+    // back-to-menu button (a real tappable pill, not a bare glyph)
+    const bw = 64, bh = 34, bxo = 8, byo = Math.floor((hudH - bh) / 2);
+    this._backBtn = { x: bxo, y: byo, w: bw, h: bh };
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(bxo, byo, bw, bh);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(bxo, byo, bw, 2); ctx.fillRect(bxo, byo + bh - 2, bw, 2);
+    ctx.fillRect(bxo, byo, 2, bh); ctx.fillRect(bxo + bw - 2, byo, 2, bh);
+    drawText(ctx, '◀', bxo + 11, byo + Math.floor(bh / 2) - 6, 2, PAL.ui, 'left');
+    drawText(ctx, 'MENU', bxo + 26, byo + Math.floor(bh / 2) - 3, 1, PAL.uiDim, 'left');
     const title = this.gameMode === 'story' ? this.levelId + ' ' + this.lv.name : this.levelId;
     // center in the free span between the back button and coins/keys
-    const spanL = 38, spanR = W - (this.state.keys > 0 ? 150 : 108);
+    const spanL = bxo + bw + 10, spanR = W - (this.state.keys > 0 ? 150 : 108);
     drawTextFit(ctx, title, (spanL + spanR) / 2, 10, spanR - spanL - 6, 2, PAL.ui, 'center', '#000');
     if (this.gameMode === 'challenge') {
       const left = this.movesLeft();

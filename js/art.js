@@ -494,7 +494,7 @@ hero(ctx, dir, frame, px, py, tile, pushing) {
   const sheets = this._activeSheets();
   const src = (pushing && dir === 'left') ? sheets.pushLeft : sheets.sheet;
   if (!src || (src.complete === false)) return;
-  const dh = Math.round(tile * 1.2);
+  const dh = Math.round(tile * 1.05);
   const dw = Math.round(dh * sw / sh);
   const dx = px + ((tile - dw) >> 1);
   const dy = py + tile - dh;

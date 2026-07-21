@@ -125,10 +125,11 @@ const ScreenTitle = {
   },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
-    const s = Math.max(2, Math.floor(W / 130));
+    const s = Math.max(2, Math.floor(W / 200));
+    const big = Math.max(4, Math.floor(W / 82));
     const ly = H * 0.24;
-    drawText(ctx, 'DELVE', W / 2, ly, s * 2.5 | 0, PAL.goldHi, 'center', '#3a2808');
-    drawText(ctx, STORY.title, W / 2, ly + 7 * (s * 2.5 | 0) + 14, Math.max(2, s - 1), PAL.ui, 'center', '#000');
+    drawText(ctx, 'DELVE', W / 2, ly, big, PAL.goldHi, 'center', '#3a2808');
+    drawText(ctx, STORY.title, W / 2, ly + 7 * big + 12, Math.max(2, s), PAL.ui, 'center', '#000');
     // hero strolling on a floor strip
     const stripY = H * 0.56;
     const ts = 46;
