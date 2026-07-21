@@ -422,22 +422,23 @@ WALK: {
   left:  [[217,480,51,63],[337,480,52,63],[459,480,49,63],[577,480,50,63]],
   right: [[222,551,49,64],[341,551,50,64],[461,551,49,64],[580,551,49,64]],
 },
+// PUSH rows taken from hero2.png's dedicated PUSH section (all four
+// directions have real push poses — bounding boxes measured from the
+// sheet's non-transparent content, tight per frame).
 PUSH: {
-  up:    [[221,343,46,65],[339,343,48,65],[461,343,48,65],[578,343,48,65]],
-  down:  [[220,727,45,64],[339,727,45,64],[459,727,45,64],[579,727,44,64]],
-  left:  [[70,2,54,51],[161,2,54,51],[254,2,54,51],[345,2,55,51]],
-  right: [[212,653,67,65],[332,653,65,65],[451,653,66,65],[570,653,66,65]],
+  up:    [[214,653,64,63],[333,653,63,63],[453,653,63,63],[572,653,63,63]],
+  down:  [[220,728,44,62],[340,728,44,62],[460,728,44,62],[579,728,44,61]],
+  left:  [[209,799,69,62],[328,799,68,62],[448,799,68,62],[567,799,68,62]],
+  right: [[209,876,69,62],[329,876,68,62],[449,875,68,63],[568,876,67,62]],
 },
 
-sheet: null, pushLeftSheet: null,
+sheet: null,
 _skin: 'skin_default', _skinCache: {},
 
 loadSprites(onReady) {
   this.sheet = new Image();
   this.sheet.src = 'hero2.png';
   this.sheet.onload = onReady;
-  this.pushLeftSheet = new Image();
-  this.pushLeftSheet.src = 'push_left.png';
 },
 
 // ── skins: recolor the green tunic/cap to a tint, keep shading ──
@@ -472,27 +473,21 @@ _recolor(img, tint) {
   return cv;
 },
 
-_activeSheets() {
+_activeSheet() {
   const sk = SKINS[this._skin];
-  if (!sk || !sk.tint) return { sheet: this.sheet, pushLeft: this.pushLeftSheet };
-  let cache = this._skinCache[this._skin];
-  if (!cache) {
-    if (!this.sheet || !this.sheet.complete || !this.pushLeftSheet.complete) {
-      return { sheet: this.sheet, pushLeft: this.pushLeftSheet };
-    }
-    cache = this._skinCache[this._skin] = {
-      sheet: this._recolor(this.sheet, sk.tint),
-      pushLeft: this._recolor(this.pushLeftSheet, sk.tint),
-    };
+  if (!sk || !sk.tint) return this.sheet;
+  let cached = this._skinCache[this._skin];
+  if (!cached) {
+    if (!this.sheet || !this.sheet.complete) return this.sheet;
+    cached = this._skinCache[this._skin] = this._recolor(this.sheet, sk.tint);
   }
-  return cache;
+  return cached;
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing) {
   const frames = pushing ? this.PUSH[dir] : this.WALK[dir];
   const [sx, sy, sw, sh] = frames[frame % 4];
-  const sheets = this._activeSheets();
-  const src = (pushing && dir === 'left') ? sheets.pushLeft : sheets.sheet;
+  const src = this._activeSheet();
   if (!src || (src.complete === false)) return;
   const dh = Math.round(tile * 1.05);
   const dw = Math.round(dh * sw / sh);

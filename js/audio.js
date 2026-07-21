@@ -4,6 +4,7 @@
 const Snd = {
   ctx: null, master: null, sfxGain: null, musGain: null,
   musicOn: true, sfxOn: true,
+  musVol: 0.8, sfxVol: 0.9,   // 0..1 user levels
   _musicTimer: null, _song: null, _songStep: 0, _nextNoteTime: 0,
 
   init() {
@@ -30,8 +31,20 @@ const Snd = {
 
   applySettings() {
     if (!this.ctx) return;
-    this.sfxGain.gain.value = this.sfxOn ? 1 : 0;
-    this.musGain.gain.value = this.musicOn ? 0.55 : 0;
+    // music is mixed lower than sfx so the loop never buries feedback cues
+    this.sfxGain.gain.value = this.sfxOn ? this.sfxVol : 0;
+    this.musGain.gain.value = this.musicOn ? this.musVol * 0.7 : 0;
+  },
+
+  // pull the latest levels from the save and apply them
+  syncVolumes() {
+    if (typeof Save !== 'undefined' && Save.data) {
+      const s = Save.data.settings;
+      this.musicOn = s.music; this.sfxOn = s.sfx;
+      this.musVol = s.musicVol != null ? s.musicVol : 0.8;
+      this.sfxVol = s.sfxVol != null ? s.sfxVol : 0.9;
+    }
+    this.applySettings();
   },
 
   // ── primitive: one enveloped oscillator note ──

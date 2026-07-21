@@ -5,7 +5,10 @@
 //   challenge — endless generated depths with a move budget
 //   timed     — 5-stage generated gauntlet against the clock
 
-const MOVE_MS = 150;
+// Walk timing lives on App.moveMs so dev tools can tune it live.
+// 350ms/tile ~= 2.9 tiles/sec, a Game-Boy-era Zelda/Pokemon walk pace
+// (was 150ms = ~6.6 tiles/sec, too fast to read the animation).
+function moveMs() { return (typeof App !== 'undefined' && App.moveMs) || 350; }
 
 const ScreenGame = {
   // mode: dialog | play | moving | chest | won | results | runover
@@ -478,8 +481,8 @@ const ScreenGame = {
 
     if (this.mode === 'moving' && this.anim) {
       this.anim.t += dt * 1000;
-      this.frame = 1 + Math.floor((this.anim.t / MOVE_MS) * 3.99) % 4;
-      if (this.anim.t >= MOVE_MS) { this.frame = 0; this.settleMove(); }
+      this.frame = 1 + Math.floor((this.anim.t / moveMs()) * 3.99) % 4;
+      if (this.anim.t >= moveMs()) { this.frame = 0; this.settleMove(); }
     } else if (this.mode === 'play') {
       if (this.heldDir) {
         this.holdTimer += dt;
@@ -561,7 +564,7 @@ const ScreenGame = {
     }
     const pushEv = (this.anim && this.anim.push) || null;
     if (pushEv && this.anim) {
-      const pr = this.anim.t / MOVE_MS;
+      const pr = this.anim.t / moveMs();
       const br = pushEv.fr + (pushEv.tr - pushEv.fr) * pr;
       const bc = pushEv.fc + (pushEv.tc - pushEv.fc) * pr;
       Art.block(ctx, Math.round(bx + bc * T), Math.round(by + br * T), T, false);
@@ -588,7 +591,7 @@ const ScreenGame = {
     let hr = st.player.r, hc = st.player.c;
     let pushing = false;
     if (this.anim) {
-      const pr = this.anim.t / MOVE_MS;
+      const pr = this.anim.t / moveMs();
       const np = this.anim.newState.player;
       hr = this.anim.from.r + (np.r - this.anim.from.r) * pr;
       hc = this.anim.from.c + (np.c - this.anim.from.c) * pr;
@@ -711,7 +714,7 @@ const ScreenGame = {
       Art.keyIcon(ctx, W - 110, 12, 16);
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');
     }
-    if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6) {
+    if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6 && Save.data.settings.tips !== false) {
       drawTextFit(ctx, this.lv.hint, W / 2, hudH + 6, W - 16, 1, PAL.gold, 'center', '#000');
     }
   },

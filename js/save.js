@@ -33,9 +33,15 @@ const Save = {
       },
       settings: {
         music: true,
+        musicVol: 0.8,   // 0..1
         sfx: true,
+        sfxVol: 0.9,     // 0..1
         reducedFlash: false,
         haptics: true,
+        tips: true,      // show first-time tutorial hints
+      },
+      dev: {
+        unlocked: false,
       },
       meta: {
         seenIntro: false,

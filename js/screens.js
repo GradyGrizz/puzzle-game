@@ -400,64 +400,337 @@ const ScreenStory = {
 };
 
 // ══ SETTINGS ══════════════════════════════════════════════════
+// Secret dev-mode code. Client-side only — anyone reading the JS can find
+// it, so it's obscurity (hidden entry + code), not real security. Change
+// it here anytime. '3358' spells DELV on a phone keypad (D3 E3 L5 V8).
+const DEV_CODE = '3358';
+
 const ScreenSettings = {
-  t: 0, confirmingWipe: false,
+  t: 0, sel: 0, scrollY: 0, confirmWipe: false, toast: null,
+  pad: null, verTaps: 0, verT: 0, verRect: null,
+
   enter() {
-    this.t = 0; this.confirmingWipe = false;
-    this._rebuild();
+    this.t = 0; this.scrollY = 0; this.confirmWipe = false;
+    this.toast = null; this.pad = null; this.verTaps = 0; this.verT = 0;
+    this._build();
+    this.sel = this.rows.findIndex(r => r.type !== 'header');
   },
-  _rebuild() {
-    const st = Save.data.settings;
-    this.list = new MenuList([
-      { label: 'MUSIC: ' + (st.music ? 'ON' : 'OFF'), action: () => this._toggle('music') },
-      { label: 'SOUND FX: ' + (st.sfx ? 'ON' : 'OFF'), action: () => this._toggle('sfx') },
-      { label: 'REDUCED FLASH: ' + (st.reducedFlash ? 'ON' : 'OFF'), action: () => this._toggle('reducedFlash') },
-      { label: 'HAPTICS: ' + (st.haptics ? 'ON' : 'OFF'), action: () => this._toggle('haptics') },
-      { label: this.confirmingWipe ? 'REALLY ERASE ALL?' : 'ERASE PROGRESS', action: () => this._wipe() },
-      { label: 'BACK', action: () => this.onBack() },
-    ]);
-    if (this._sel != null) this.list.sel = this._sel;
-  },
-  _toggle(k) {
-    const st = Save.data.settings;
-    st[k] = !st[k];
-    Save.write();
-    Snd.musicOn = st.music; Snd.sfxOn = st.sfx;
-    Snd.applySettings();
-    this._sel = this.list.sel;
-    this.confirmingWipe = false;
-    this._rebuild();
-  },
-  _wipe() {
-    if (!this.confirmingWipe) {
-      this.confirmingWipe = true;
-      this._sel = this.list.sel;
-      this._rebuild();
-      return;
+
+  _apply() { Save.write(); Snd.syncVolumes(); },
+  _say(t) { this.toast = { text: t, t: 2.2 }; },
+
+  _build() {
+    const s = Save.data.settings;
+    const rows = [];
+    rows.push({ type: 'header', label: 'AUDIO' });
+    rows.push({ type: 'toggle', label: 'MUSIC', get: () => s.music, set: v => { s.music = v; this._apply(); } });
+    rows.push({ type: 'slider', label: 'MUSIC VOLUME', get: () => s.musicVol, set: v => { s.musicVol = v; this._apply(); }, dim: () => !s.music });
+    rows.push({ type: 'toggle', label: 'SOUND FX', get: () => s.sfx, set: v => { s.sfx = v; this._apply(); } });
+    rows.push({ type: 'slider', label: 'SFX VOLUME', get: () => s.sfxVol, set: v => { s.sfxVol = v; this._apply(); Snd.blip(); }, dim: () => !s.sfx });
+    rows.push({ type: 'header', label: 'GAME' });
+    rows.push({ type: 'toggle', label: 'HAPTICS', get: () => s.haptics, set: v => { s.haptics = v; Save.write(); if (v) Platform.haptic(); } });
+    rows.push({ type: 'toggle', label: 'REDUCED FLASH', get: () => s.reducedFlash, set: v => { s.reducedFlash = v; Save.write(); } });
+    rows.push({ type: 'toggle', label: 'TUTORIAL TIPS', get: () => s.tips !== false, set: v => { s.tips = v; Save.write(); } });
+    if (Save.data.dev.unlocked) {
+      rows.push({ type: 'header', label: 'DEVELOPER' });
+      rows.push({ type: 'button', label: 'DEV TOOLS', gold: true, action: () => { Snd.select(); App.setScreen('dev'); } });
     }
+    rows.push({ type: 'header', label: 'ACCOUNT' });
+    rows.push({ type: 'button', label: this.confirmWipe ? 'TAP AGAIN TO ERASE ALL' : 'RESET PROGRESS', danger: true, action: () => this._reset() });
+    rows.push({ type: 'button', label: 'LOG OUT', disabled: true, action: () => this._say('ACCOUNTS ARE COMING SOON.') });
+    this.rows = rows;
+  },
+
+  _reset() {
+    if (!this.confirmWipe) { this.confirmWipe = true; Snd.blip(); this._build(); return; }
+    const wasDev = Save.data.dev.unlocked;   // keep dev access across a progress wipe
     Save.wipe();
-    Snd.musicOn = Save.data.settings.music; Snd.sfxOn = Save.data.settings.sfx;
-    Snd.applySettings();
+    Save.data.dev.unlocked = wasDev; Save.write();
+    Snd.syncVolumes();
     Art.setSkin(Save.data.shop.skin);
     Art.setTheme(Save.data.shop.theme);
     Snd.error();
-    this.confirmingWipe = false;
-    this._sel = 0;
-    this._rebuild();
+    this.confirmWipe = false;
+    this._build();
+    this._say('PROGRESS ERASED.');
   },
-  update(dt) { this.t += dt; },
+
+  _focusable(i) { const r = this.rows[i]; return r && r.type !== 'header'; },
+
+  update(dt) {
+    this.t += dt;
+    if (this.toast) { this.toast.t -= dt; if (this.toast.t <= 0) this.toast = null; }
+    if (this.verT > 0) { this.verT -= dt; if (this.verT <= 0) this.verTaps = 0; }
+    if (this.pad && this.pad.shake > 0) this.pad.shake = Math.max(0, this.pad.shake - dt * 6);
+  },
+
+  // ── layout (scrollable card list) ──
+  _layout(W, H) {
+    const top = 78;
+    let y = top - this.scrollY;
+    const out = [];
+    for (const r of this.rows) {
+      const h = r.type === 'header' ? 30 : 54;
+      out.push({ row: r, y, h });
+      y += h + 8;
+    }
+    this.contentH = y + this.scrollY - top;
+    this.viewH = H - top - 40;
+    return out;
+  },
+  _clampScroll() { this.scrollY = Math.max(0, Math.min(Math.max(0, this.contentH - this.viewH), this.scrollY)); },
+  _ensureVisible() {
+    const lay = this._layout(App.W, App.H);
+    const it = lay[this.sel]; if (!it) return;
+    if (it.y < 84) this.scrollY -= (84 - it.y);
+    else if (it.y + it.h > App.H - 44) this.scrollY += it.y + it.h - (App.H - 44);
+    this._clampScroll();
+  },
+
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 240));
-    drawText(ctx, 'SETTINGS', W / 2, 40, s + 1, PAL.goldHi, 'center', '#000');
-    const iw = Math.min(W - 40, 360);
-    this.list.draw(ctx, W / 2, Math.max(100, H * 0.16), iw, 30 + s * 10, s, this.t);
-    drawText(ctx, 'DELVE V1.0', W / 2, H - 30, 1, PAL.uiDim, 'center');
+    const lay = this._layout(W, H);
+    const pw = Math.min(W - 28, 420), px = (W - pw) / 2;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 70, W, H - 70); ctx.clip();
+    for (let i = 0; i < lay.length; i++) {
+      const { row, y, h } = lay[i];
+      if (y + h < 60 || y > H) continue;
+      if (row.type === 'header') { drawText(ctx, row.label, px + 4, y + 12, 1, PAL.uiDim, 'left'); continue; }
+      const seld = i === this.sel;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px + 4, y + 4, pw, h);
+      ctx.fillStyle = seld ? '#161226' : '#0d1120'; ctx.fillRect(px, y, pw, h);
+      if (seld) { ctx.fillStyle = 'rgba(210,160,40,0.08)'; ctx.fillRect(px, y, pw, h); }
+      const border = row.danger ? PAL.red : (row.gold ? PAL.gold : (seld ? PAL.gold : 'rgba(255,255,255,0.10)'));
+      ctx.fillStyle = border;
+      ctx.fillRect(px, y, pw, 2); ctx.fillRect(px, y + h - 2, pw, 2);
+      ctx.fillRect(px, y, 2, h); ctx.fillRect(px + pw - 2, y, 2, h);
+      if (seld) { ctx.fillStyle = row.danger ? PAL.red : PAL.goldHi; ctx.fillRect(px, y, 5, h); }
+
+      const labelCol = row.disabled ? PAL.uiDim : row.danger ? '#e06a58' : row.gold ? PAL.goldHi : (seld ? PAL.goldHi : PAL.ui);
+      const midY = y + Math.floor(h / 2);
+
+      if (row.type === 'toggle') {
+        drawTextFit(ctx, row.label, px + 16, midY - 6, pw - 120, s, labelCol, 'left');
+        const on = row.get();
+        const pw2 = 54, ph2 = 24, tx = px + pw - pw2 - 14, ty = midY - ph2 / 2;
+        ctx.fillStyle = on ? 'rgba(210,160,40,0.25)' : 'rgba(255,255,255,0.06)';
+        ctx.fillRect(tx, ty, pw2, ph2);
+        ctx.fillStyle = on ? PAL.gold : 'rgba(255,255,255,0.14)';
+        ctx.fillRect(tx, ty, pw2, 2); ctx.fillRect(tx, ty + ph2 - 2, pw2, 2);
+        ctx.fillRect(tx, ty, 2, ph2); ctx.fillRect(tx + pw2 - 2, ty, 2, ph2);
+        // knob
+        ctx.fillStyle = on ? PAL.goldHi : PAL.uiDim;
+        ctx.fillRect(on ? tx + pw2 - 20 : tx + 4, ty + 4, 16, ph2 - 8);
+        drawText(ctx, on ? 'ON' : 'OFF', on ? tx + 6 : tx + pw2 - 6, midY - 3, 1, on ? PAL.goldHi : PAL.uiDim, on ? 'left' : 'right');
+      } else if (row.type === 'slider') {
+        const dim = row.dim && row.dim();
+        drawText(ctx, row.label, px + 16, y + 10, 1, dim ? PAL.uiDim : (seld ? PAL.goldHi : PAL.ui), 'left');
+        const val = row.get();
+        const trackX = px + 16, trackW = pw - 84, trackY = y + h - 18;
+        row._track = { x: trackX, w: trackW };
+        ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(trackX, trackY, trackW, 6);
+        ctx.fillStyle = dim ? PAL.uiDark : (seld ? PAL.goldHi : PAL.gold);
+        ctx.fillRect(trackX, trackY, Math.round(trackW * val), 6);
+        // knob
+        const kx = trackX + Math.round(trackW * val);
+        ctx.fillStyle = dim ? PAL.uiDim : PAL.goldHi;
+        ctx.fillRect(kx - 3, trackY - 4, 7, 14);
+        drawText(ctx, Math.round(val * 100) + '%', px + pw - 14, trackY - 3, 1, dim ? PAL.uiDim : PAL.ui, 'right');
+      } else { // button
+        drawTextFit(ctx, row.label, px + pw / 2, midY - 3 * s, pw - 32, s, labelCol, 'center', '#000');
+      }
+    }
+    ctx.restore();
+
+    // header bar
+    ctx.fillStyle = 'rgba(4,5,10,0.92)'; ctx.fillRect(0, 0, W, 70);
+    drawText(ctx, 'SETTINGS', W / 2, 24, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, '◀ BACK', 16, 12, s, PAL.uiDim, 'left');
+
+    if (this.contentH > this.viewH) {
+      const frac = this.viewH / this.contentH, barH = Math.max(24, this.viewH * frac);
+      const barY = 78 + (this.scrollY / (this.contentH - this.viewH)) * (this.viewH - barH);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(W - 5, barY, 3, barH);
+    }
+
+    // version string (tap 7x to reveal the code pad) — sits at the very bottom
+    const vy = H - 22;
+    this.verRect = { x: W / 2 - 60, y: vy - 4, w: 120, h: 22 };
+    drawText(ctx, 'DELVE V1.0', W / 2, vy, 1, PAL.uiDark, 'center');
+
+    if (this.toast) {
+      const tw = textWidth(this.toast.text, 2) + 24;
+      ctx.fillStyle = 'rgba(4,5,10,0.94)'; ctx.fillRect((W - tw) / 2, H - 96, tw, 28);
+      drawTextFit(ctx, this.toast.text, W / 2, H - 89, tw - 16, 2, PAL.goldHi, 'center');
+    }
+
+    if (this.pad) this._drawPad(ctx, W, H, s);
   },
-  onDirPress(dc, dr) { if (dr) { this.list.nav(dr); this.confirmingWipe = false; this._sel = this.list.sel; this._rebuild(); } },
+
+  // ── code keypad overlay ──
+  _drawPad(ctx, W, H, s) {
+    ctx.fillStyle = 'rgba(2,3,6,0.92)'; ctx.fillRect(0, 0, W, H);
+    const pw = Math.min(W - 48, 300), ph = 360;
+    const shake = this.pad.shake > 0 ? Math.round(Math.sin(this.pad.shake * 40) * 5) : 0;
+    const px = (W - pw) / 2 + shake, py = (H - ph) / 2;
+    Art.panel(ctx, px, py, pw, ph);
+    drawText(ctx, 'ENTER CODE', W / 2 + shake, py + 20, s, PAL.goldHi, 'center', '#000');
+    // digit dots
+    const n = 4, dgap = 30, dx0 = W / 2 - (n - 1) * dgap / 2 + shake;
+    for (let i = 0; i < n; i++) {
+      const filled = i < this.pad.digits.length;
+      ctx.fillStyle = filled ? PAL.goldHi : 'rgba(255,255,255,0.14)';
+      const cx = dx0 + i * dgap;
+      if (filled) ctx.fillRect(cx - 8, py + 52, 16, 16);
+      else ctx.fillRect(cx - 8, py + 66, 16, 3);
+    }
+    // keypad 3x4
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLR', '0', 'DEL'];
+    const kw = (pw - 48) / 3, kh = 52, kx0 = px + 24, ky0 = py + 92;
+    this.pad.rects = [];
+    for (let i = 0; i < keys.length; i++) {
+      const r = Math.floor(i / 3), c = i % 3;
+      const kx = kx0 + c * kw, ky = ky0 + r * (kh + 6);
+      this.pad.rects.push({ x: kx, y: ky, w: kw - 6, h: kh, key: keys[i] });
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(kx, ky, kw - 6, kh);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(kx, ky, kw - 6, 2); ctx.fillRect(kx, ky + kh - 2, kw - 6, 2);
+      ctx.fillRect(kx, ky, 2, kh); ctx.fillRect(kx + kw - 8, ky, 2, kh);
+      const isWord = keys[i].length > 1;
+      drawText(ctx, keys[i], kx + (kw - 6) / 2, ky + kh / 2 - (isWord ? 3 : 6), isWord ? 1 : s, isWord ? PAL.uiDim : PAL.ui, 'center');
+    }
+    drawText(ctx, 'TAP OUTSIDE TO CANCEL', W / 2 + shake, py + ph - 18, 1, PAL.uiDim, 'center');
+  },
+
+  _padKey(k) {
+    if (k === 'CLR') { this.pad.digits = ''; Snd.blip(); return; }
+    if (k === 'DEL') { this.pad.digits = this.pad.digits.slice(0, -1); Snd.blip(); return; }
+    if (this.pad.digits.length >= 4) return;
+    this.pad.digits += k; Snd.blip();
+    if (this.pad.digits.length === 4) {
+      if (this.pad.digits === DEV_CODE) {
+        Save.data.dev.unlocked = true; Save.write();
+        Snd.itemGet();
+        this.pad = null;
+        this._build();
+        this.sel = this.rows.findIndex(r => r.label === 'DEV TOOLS');
+        this._ensureVisible();
+        this._say('DEV MODE UNLOCKED');
+      } else {
+        Snd.error();
+        this.pad.shake = 1; this.pad.digits = '';
+      }
+    }
+  },
+
+  // ── input ──
+  onDirPress(dc, dr) {
+    if (this.pad) return;
+    if (dr) {
+      let i = this.sel;
+      do { i += dr; } while (i >= 0 && i < this.rows.length && !this._focusable(i));
+      if (i >= 0 && i < this.rows.length) { this.sel = i; this.confirmWipe = false; this._build(); Snd.blip(); this._ensureVisible(); }
+    } else if (dc) {
+      const row = this.rows[this.sel];
+      if (row && row.type === 'slider') {
+        const v = Math.max(0, Math.min(1, Math.round((row.get() + dc * 0.1) * 10) / 10));
+        row.set(v); Snd.tick();
+      }
+    }
+  },
   onDirRelease() {},
-  onConfirm() { this.list.activate(); },
-  onTap(x, y) { this.list.tapAt(x, y); },
-  onBack() { Snd.back(); App.setScreen('menu'); },
+  onConfirm() {
+    if (this.pad) return;
+    const row = this.rows[this.sel];
+    if (!row) return;
+    if (row.type === 'toggle') { row.set(!row.get()); Snd.select(); this.confirmWipe = false; this._build(); }
+    else if (row.type === 'button') row.action();
+    else if (row.type === 'slider') { row.set(row.get() >= 1 ? 0 : Math.min(1, row.get() + 0.1)); }
+  },
+  onScroll(dy) { if (!this.pad) { this.scrollY -= dy; this._clampScroll(); } },
+
+  onTap(x, y) {
+    if (this.pad) {
+      for (const r of this.pad.rects || []) {
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { this._padKey(r.key); return; }
+      }
+      // tap outside the panel cancels
+      this.pad = null; Snd.back();
+      return;
+    }
+    if (y < 40 && x < 110) { this.onBack(); return; }
+    // version tap-to-reveal
+    const v = this.verRect;
+    if (v && x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h && !Save.data.dev.unlocked) {
+      this.verTaps++; this.verT = 2.5;
+      if (this.verTaps >= 7) { this.verTaps = 0; this.pad = { digits: '', shake: 0, rects: [] }; Snd.select(); }
+      else if (this.verTaps >= 4) this._say((7 - this.verTaps) + ' MORE...');
+      return;
+    }
+    const lay = this._layout(App.W, App.H);
+    const pw = Math.min(App.W - 28, 420), px = (App.W - pw) / 2;
+    for (let i = 0; i < lay.length; i++) {
+      const { row, y: ry, h } = lay[i];
+      if (row.type === 'header' || ry < 60) continue;
+      if (x >= px && x < px + pw && y >= ry && y < ry + h) {
+        this.sel = i;
+        if (row.type === 'toggle') { row.set(!row.get()); Snd.select(); this.confirmWipe = false; this._build(); }
+        else if (row.type === 'button') row.action();
+        else if (row.type === 'slider' && row._track) {
+          const val = Math.max(0, Math.min(1, (x - row._track.x) / row._track.w));
+          row.set(Math.round(val * 20) / 20); Snd.tick();
+        }
+        return;
+      }
+    }
+  },
+  onBack() { if (this.pad) { this.pad = null; Snd.back(); return; } Snd.back(); App.setScreen('menu'); },
+};
+
+// ══ DEV TOOLS (unlocked via code in settings) ═════════════════
+const ScreenDev = {
+  t: 0,
+  enter() { this.t = 0; this._build(); },
+  _speedName() {
+    const m = App.moveMs;
+    return m <= 220 ? 'FAST' : m >= 480 ? 'SLOW' : 'NORMAL';
+  },
+  _build() {
+    const grantAllItems = () => { for (const k in ITEMS) Save.grantItem(k); };
+    const items = [
+      { label: '+10,000 COINS', action: () => { Save.addCoins(10000); Snd.coin(); this._say('COINS ADDED'); } },
+      { label: 'UNLOCK ALL LEVELS', action: () => { for (const lv of allStoryLevels()) if (!Save.isLevelDone(lv.id)) Save.data.story.levels[lv.id] = { done: true, bestMoves: 0 }; Save.write(); Snd.select(); this._say('ALL LEVELS UNLOCKED'); } },
+      { label: 'GRANT ALL RELICS', action: () => { grantAllItems(); Snd.itemGet(); this._say('RELICS GRANTED'); } },
+      { label: 'UNLOCK SHOP ITEMS', action: () => { for (const id in SKINS) if (!Save.owns(id)) Save.data.shop.owned.push(id); for (const id in THEMES) if (!Save.owns(id)) Save.data.shop.owned.push(id); Save.addHints(20); Save.write(); Snd.buy(); this._say('SHOP UNLOCKED'); } },
+      { label: 'WALK SPEED: ' + this._speedName(), action: () => { App.moveMs = App.moveMs <= 220 ? 350 : App.moveMs >= 480 ? 200 : 500; Snd.blip(); this._build(); } },
+      { label: 'LOCK DEV MODE', danger: true, action: () => { Save.data.dev.unlocked = false; Save.write(); Snd.back(); App.setScreen('settings'); } },
+      { label: 'BACK', action: () => { Snd.back(); App.setScreen('settings'); } },
+    ];
+    this.list = new MenuList(items);
+    if (this._sel != null) this.list.sel = Math.min(this._sel, items.length - 1);
+  },
+  _say(t) { this.toast = { text: t, t: 1.8 }; },
+  update(dt) { this.t += dt; if (this.toast) { this.toast.t -= dt; if (this.toast.t <= 0) this.toast = null; } },
+  draw(ctx, W, H) {
+    drawBackdrop(ctx, W, H, this.t);
+    const s = Math.max(2, Math.floor(W / 240));
+    drawText(ctx, 'DEV TOOLS', W / 2, 34, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, 'FOR TESTING - HANDLE WITH CARE', W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
+    const iw = Math.min(W - 40, 360);
+    this.list.draw(ctx, W / 2, Math.max(96, H * 0.15), iw, 30 + s * 8, s, this.t);
+    if (this.toast) {
+      const tw = textWidth(this.toast.text, 2) + 24;
+      ctx.fillStyle = 'rgba(4,5,10,0.94)'; ctx.fillRect((W - tw) / 2, H - 70, tw, 28);
+      drawText(ctx, this.toast.text, W / 2, H - 63, 2, PAL.goldHi, 'center');
+    }
+  },
+  onDirPress(dc, dr) { if (dr) { this.list.nav(dr); this._sel = this.list.sel; } },
+  onDirRelease() {},
+  onConfirm() { this._sel = this.list.sel; this.list.activate(); },
+  onTap(x, y) { this._sel = this.list.sel; this.list.tapAt(x, y); },
+  onBack() { Snd.back(); App.setScreen('settings'); },
 };
 

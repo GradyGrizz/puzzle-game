@@ -14,8 +14,9 @@ const App = {
     this.canvas = document.getElementById('c');
     this.ctx = this.canvas.getContext('2d');
     Save.load();
-    Snd.musicOn = Save.data.settings.music;
-    Snd.sfxOn = Save.data.settings.sfx;
+    Snd.syncVolumes();
+    // default walk pace (dev tools can retune at runtime)
+    this.moveMs = 350;
 
     this.screens = {
       title: ScreenTitle,
@@ -27,6 +28,7 @@ const App = {
       challenge: ScreenChallenge,
       timed: ScreenTimed,
       shop: ScreenShop,
+      dev: ScreenDev,
     };
 
     Art.setSkin(Save.data.shop.skin);
