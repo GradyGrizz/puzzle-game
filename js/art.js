@@ -90,16 +90,24 @@ wall(ctx, x, y, t) {
   ctx.fillRect(x + t - 1, y, 1, t); ctx.fillRect(x, y + t - 1, t, 1);
 },
 
+// A flat, recessed floor-plate rather than a tall raised block, so the
+// hero (drawn on top) clearly stands ON it instead of merging into it.
 switchTile(ctx, x, y, t, on) {
   this.floor(ctx, x, y, t);
-  const s = Math.floor(t * .68), ox = x + Math.floor((t - s) / 2), oy = y + Math.floor((t - s) / 2);
+  const s = Math.floor(t * .5), ox = x + Math.floor((t - s) / 2), oy = y + Math.floor((t - s) / 2);
+  // dark recessed socket the plate sits inside
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(ox - 2, oy - 2, s + 4, s + 4);
+  // red plate (pressed = brighter, flush)
   ctx.fillStyle = on ? PAL.swAPl : PAL.swPl; ctx.fillRect(ox, oy, s, s);
-  const is = Math.floor(s * .55), iox = ox + Math.floor((s - is) / 2), ioy = oy + Math.floor((s - is) / 2) + (on ? 1 : 0);
+  const is = Math.floor(s * .58), iox = ox + Math.floor((s - is) / 2), ioy = oy + Math.floor((s - is) / 2);
   ctx.fillStyle = on ? PAL.swABtn : PAL.swBtn; ctx.fillRect(iox, ioy, is, is);
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(iox, ioy, is, 2); ctx.fillRect(iox, ioy, 2, is);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(iox, ioy + is - 2, is, 2); ctx.fillRect(iox + is - 2, ioy, 2, is);
+  // subtle bevel so it reads as an inset button
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  ctx.fillRect(ox, oy, s, 1); ctx.fillRect(ox, oy, 1, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(ox, oy + s - 1, s, 1); ctx.fillRect(ox + s - 1, oy, 1, s);
+  if (on) { ctx.fillStyle = 'rgba(255,200,80,0.25)'; ctx.fillRect(ox, oy, s, s); }
 },
 
 block(ctx, x, y, t, glow) {
@@ -422,14 +430,17 @@ WALK: {
   left:  [[217,480,51,63],[337,480,52,63],[459,480,49,63],[577,480,50,63]],
   right: [[222,551,49,64],[341,551,50,64],[461,551,49,64],[580,551,49,64]],
 },
-// PUSH rows taken from hero2.png's dedicated PUSH section (all four
-// directions have real push poses — bounding boxes measured from the
-// sheet's non-transparent content, tight per frame).
+// PUSH rows from hero2.png. The sheet has: a back-view row (up), a
+// front-view row (down), and a RIGHT-facing profile row. There is NO
+// dedicated left-facing push row — the sheet's fourth push row is just
+// another right-facing pose — so `left` is the right frames mirrored
+// horizontally at draw time (handled in hero()). Boxes measured tight
+// from the sheet's non-transparent content.
 PUSH: {
-  up:    [[214,653,64,63],[333,653,63,63],[453,653,63,63],[572,653,63,63]],
-  down:  [[220,728,44,62],[340,728,44,62],[460,728,44,62],[579,728,44,61]],
-  left:  [[209,799,69,62],[328,799,68,62],[448,799,68,62],[567,799,68,62]],
-  right: [[209,876,69,62],[329,876,68,62],[449,875,68,63],[568,876,67,62]],
+  up:    [[214,653,64,63],[333,653,63,63],[453,653,63,63],[572,653,63,63]], // back view
+  down:  [[220,728,44,62],[340,728,44,62],[460,728,44,62],[579,728,44,61]], // front view
+  right: [[209,876,69,62],[329,876,68,62],[449,875,68,63],[568,876,67,62]], // right profile
+  // left := right, drawn flipped
 },
 
 sheet: null,
@@ -485,7 +496,14 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing) {
-  const frames = pushing ? this.PUSH[dir] : this.WALK[dir];
+  // no left-push sprite on the sheet -> mirror the right-push frames
+  let flip = false, frames;
+  if (pushing) {
+    if (dir === 'left') { frames = this.PUSH.right; flip = true; }
+    else frames = this.PUSH[dir];
+  } else {
+    frames = this.WALK[dir];
+  }
   const [sx, sy, sw, sh] = frames[frame % 4];
   const src = this._activeSheet();
   if (!src || (src.complete === false)) return;
@@ -500,7 +518,15 @@ hero(ctx, dir, frame, px, py, tile, pushing) {
   ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+  if (flip) {
+    ctx.save();
+    ctx.translate(dx + dw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, dw, dh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
 },
 
 // ── UI chrome ────────────────────────────────────────────────
