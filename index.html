@@ -88,14 +88,19 @@ let flash  = 0;
 // ── Sizing ───────────────────────────────────────────────────
 let TILE, CW, CH;
 function resize() {
-  const dpadH = 220;
+  const dpr    = window.devicePixelRatio || 1;
+  const dpadH  = 220;
   const avail  = window.innerHeight - dpadH;
   TILE = Math.floor(Math.min(window.innerWidth / COLS, avail / ROWS));
   CW   = TILE * COLS;
   CH   = TILE * ROWS;
-  canvas.width  = CW;
-  canvas.height = CH;
+  // physical pixels = logical × dpr for sharp rendering on HiDPI screens
+  canvas.width  = CW * dpr;
+  canvas.height = CH * dpr;
+  canvas.style.width  = CW + 'px';
+  canvas.style.height = CH + 'px';
   canvas.style.top = Math.max(6, (avail - CH) / 2) + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
 }
 window.addEventListener('resize', resize);
