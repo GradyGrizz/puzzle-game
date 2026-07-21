@@ -375,6 +375,19 @@ Object.entries(DIRS).forEach(([id,[dc,dr]])=>{
   btn.addEventListener('mousedown', onPress);
 });
 
+// ── Keyboard input ────────────────────────────────────────────
+const KEY_DIRS = {
+  'ArrowUp':[0,-1],'ArrowDown':[0,1],'ArrowLeft':[-1,0],'ArrowRight':[1,0],
+};
+document.addEventListener('keydown', e=>{
+  const d = KEY_DIRS[e.key];
+  if (!d) return;
+  e.preventDefault();
+  const [dc,dr] = d;
+  if (!p.moving) tryMove(dc,dr);
+  else           inputQueue={dc,dr};
+});
+
 resize();
 requestAnimationFrame(loop);
 </script>
