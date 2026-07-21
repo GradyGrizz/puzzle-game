@@ -37,6 +37,7 @@ const Platform = {
   // light haptic tap where supported (Android web; iOS via native Haptics)
   haptic(strength) {
     try {
+      if (typeof Save !== 'undefined' && Save.data && !Save.data.settings.haptics) return;
       if (navigator.vibrate) navigator.vibrate(strength === 'heavy' ? 24 : 8);
     } catch (e) {}
   },

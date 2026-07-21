@@ -173,13 +173,25 @@ const ScreenMenu = {
   enter() {
     this.t = 0;
     Snd.playMusic('title');
-    this.list = new MenuList([
-      { label: 'STORY', sub: 'THE SUNKEN KEEP', action: () => App.setScreen('story') },
+    const items = [];
+    // quick-continue straight into the next unfinished level
+    const all = allStoryLevels();
+    const next = all.find(l => !Save.isLevelDone(l.id));
+    const started = all.some(l => Save.isLevelDone(l.id));
+    if (next && started) {
+      items.push({
+        label: 'CONTINUE', sub: next.id + ' ' + next.name,
+        action: () => App.setScreen('game', { levelId: next.id }),
+      });
+    }
+    items.push(
+      { label: 'STORY', sub: next ? 'THE SUNKEN KEEP' : 'THE KEEP SHINES AGAIN', action: () => App.setScreen('story') },
       { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', action: () => App.setScreen('challenge') },
       { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', action: () => App.setScreen('timed') },
       { label: 'SHOP', sub: 'SPEND YOUR COINS', action: () => App.setScreen('shop') },
       { label: 'SETTINGS', action: () => App.setScreen('settings') },
-    ]);
+    );
+    this.list = new MenuList(items);
   },
   update(dt) { this.t += dt; },
   draw(ctx, W, H) {
@@ -358,6 +370,7 @@ const ScreenSettings = {
       { label: 'MUSIC: ' + (st.music ? 'ON' : 'OFF'), action: () => this._toggle('music') },
       { label: 'SOUND FX: ' + (st.sfx ? 'ON' : 'OFF'), action: () => this._toggle('sfx') },
       { label: 'REDUCED FLASH: ' + (st.reducedFlash ? 'ON' : 'OFF'), action: () => this._toggle('reducedFlash') },
+      { label: 'HAPTICS: ' + (st.haptics ? 'ON' : 'OFF'), action: () => this._toggle('haptics') },
       { label: this.confirmingWipe ? 'REALLY ERASE ALL?' : 'ERASE PROGRESS', action: () => this._wipe() },
       { label: 'BACK', action: () => this.onBack() },
     ]);
@@ -395,7 +408,7 @@ const ScreenSettings = {
     drawText(ctx, 'SETTINGS', W / 2, 40, s + 1, PAL.goldHi, 'center', '#000');
     const iw = Math.min(W - 48, 360);
     this.list.draw(ctx, W / 2, Math.max(100, H * 0.16), iw, 30 + s * 10, s);
-    drawText(ctx, 'DELVE V0.1 - PHASE 1', W / 2, H - 30, 1, PAL.uiDim, 'center');
+    drawText(ctx, 'DELVE V1.0', W / 2, H - 30, 1, PAL.uiDim, 'center');
   },
   onDirPress(dc, dr) { if (dr) { this.list.nav(dr); this.confirmingWipe = false; this._sel = this.list.sel; this._rebuild(); } },
   onDirRelease() {},
@@ -404,24 +417,3 @@ const ScreenSettings = {
   onBack() { Snd.back(); App.setScreen('menu'); },
 };
 
-// ══ COMING SOON (placeholder while phases land) ═══════════════
-const ScreenSoon = {
-  t: 0, title: '',
-  enter(params) { this.t = 0; this.title = (params && params.title) || 'SOON'; },
-  update(dt) { this.t += dt; },
-  draw(ctx, W, H) {
-    drawBackdrop(ctx, W, H, this.t);
-    const s = Math.max(2, Math.floor(W / 220));
-    const pw = Math.min(W - 40, 380), ph = 170;
-    const px = (W - pw) / 2, py = H * 0.3;
-    Art.panel(ctx, px, py, pw, ph);
-    drawText(ctx, this.title, W / 2, py + 30, s + 1, PAL.goldHi, 'center', '#000');
-    drawText(ctx, 'THIS WING OF THE KEEP', W / 2, py + 80, s, PAL.ui, 'center');
-    drawText(ctx, 'IS STILL BEING DUG OUT.', W / 2, py + 80 + 9 * s, s, PAL.ui, 'center');
-    drawText(ctx, 'TAP TO GO BACK', W / 2, py + ph + 20, 1, PAL.uiDim, 'center');
-  },
-  onTap() { this.onBack(); },
-  onConfirm() { this.onBack(); },
-  onDirPress() {}, onDirRelease() {},
-  onBack() { Snd.back(); App.setScreen('menu'); },
-};

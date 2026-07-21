@@ -58,7 +58,8 @@ const ScreenGame = {
     this.frame = 0;
     this._awarded = false;
     this.hintPath = null;
-    Snd.playMusic('dungeon');
+    this.pauseList = null;
+    Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
     // hint scrolls work on story levels (small enough to solve live)
     const hintBtn = document.getElementById('btn-hint');
     if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
@@ -161,7 +162,7 @@ const ScreenGame = {
     if (this.history.length > 300) this.history.shift();
     this.anim = { from, t: 0, push: pushEv || null, events: evs, newState: res.state };
     this.mode = 'moving';
-    if (evs.some(e => e.type === 'unlock')) Snd.unlock();
+    if (evs.some(e => e.type === 'unlock')) Snd.doorUnlock();
     if (evs.some(e => e.type === 'crackBreak')) Snd.crack();
     if (pushEv) Snd.push(); else Snd.step();
   },
@@ -172,7 +173,7 @@ const ScreenGame = {
     this.state = a.newState;
     this.mode = 'play';
     const has = t => a.events.some(e => e.type === t);
-    if (a.push && !has('blockFall')) Snd.thud();
+    if (a.push && !has('blockFall')) { Snd.thud(); Platform.haptic(); }
     if (has('blockFall')) {
       const ev = a.events.find(e => e.type === 'blockFall');
       this.fallAnim = { r: ev.r, c: ev.c, t: 0 };
@@ -192,6 +193,7 @@ const ScreenGame = {
       this.mode = 'won';
       this.wonT = 0;
       Snd.fanfare();
+      Platform.haptic('heavy');
       return;
     }
     // challenge: out of moves ends the run
@@ -212,6 +214,7 @@ const ScreenGame = {
     this.holdTimer = 0;
     if (this.mode === 'play') this.attemptMove(dc, dr);
     else if (this.mode === 'moving') this.queued = { dc, dr };
+    else if (this.mode === 'paused' && dr) this.pauseList.nav(dr);
     else if ((this.mode === 'results' || this.mode === 'runover') && dr && this.resultInfo) this.resultInfo.list.nav(dr);
   },
   onDirRelease(dc, dr) {
@@ -221,16 +224,52 @@ const ScreenGame = {
   onConfirm() {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
+    else if (this.mode === 'paused') this.pauseList.activate();
     else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.activate();
   },
   onTap(x, y) {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
+    else if (this.mode === 'paused') this.pauseList.tapAt(x, y);
     else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.tapAt(x, y);
     else if (y < 44 && x < 90) this.onBack();
   },
   onBack() {
     if (this.mode === 'dialog') { this._advanceDialog(); return; }
+    if (this.mode === 'paused') { this._resume(); return; }
+    if (this.mode !== 'play' && this.mode !== 'moving') return;
+    this._pause();
+  },
+  _pause() {
+    Snd.back();
+    this.mode = 'paused';
+    this._buildPauseList();
+  },
+  _buildPauseList(keepSel) {
+    const st = Save.data.settings;
+    this.pauseList = new MenuList([
+      { label: 'RESUME', action: () => this._resume() },
+      { label: 'RESTART LEVEL', action: () => { this._resume(); this.onReset(); } },
+      { label: 'MUSIC: ' + (st.music ? 'ON' : 'OFF'), action: () => this._pauseToggle('music') },
+      { label: 'SOUND: ' + (st.sfx ? 'ON' : 'OFF'), action: () => this._pauseToggle('sfx') },
+      { label: 'QUIT', action: () => this._quit() },
+    ]);
+    if (keepSel != null) this.pauseList.sel = keepSel;
+  },
+  _pauseToggle(k) {
+    const st = Save.data.settings;
+    st[k] = !st[k];
+    Save.write();
+    Snd.musicOn = st.music; Snd.sfxOn = st.sfx;
+    Snd.applySettings();
+    this._buildPauseList(this.pauseList.sel);
+  },
+  _resume() {
+    Snd.select();
+    this.mode = 'play';
+    this.pauseList = null;
+  },
+  _quit() {
     Snd.back();
     if (this.gameMode === 'challenge') {
       // leaving mid-run ends the run (score = depths fully cleared)
@@ -599,6 +638,19 @@ const ScreenGame = {
       drawText(ctx, 'CLEAR!', W / 2, H * 0.4, 5, PAL.goldHi, 'center', '#3a2808');
     }
     if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.drawResults(ctx, W, H);
+    if (this.mode === 'paused') this.drawPause(ctx, W, H);
+  },
+
+  drawPause(ctx, W, H) {
+    // heavier dim in timed mode so pausing can't be used to study the board
+    ctx.fillStyle = this.gameMode === 'timed' ? 'rgba(2,3,6,0.93)' : 'rgba(2,3,6,0.66)';
+    ctx.fillRect(0, 0, W, H);
+    const s = Math.max(2, Math.floor(W / 240));
+    const pw = Math.min(W - 48, 340), ph = 330;
+    const px = (W - pw) / 2, py = Math.max(30, H * 0.13);
+    Art.panel(ctx, px, py, pw, ph);
+    drawText(ctx, 'PAUSED', W / 2, py + 20, s + 1, PAL.goldHi, 'center', '#000');
+    this.pauseList.draw(ctx, W / 2, py + 64, pw - 48, 42, s);
   },
 
   drawHud(ctx, W, H, hudH) {
@@ -631,7 +683,7 @@ const ScreenGame = {
     const s = Math.max(2, Math.floor(W / 240));
     const pw = Math.min(W - 24, 520);
     const lines = wrapText(this.dialog.text, s, pw - 36);
-    const lh = 8 * s + 3;
+    const lh = 9 * s + 4;
     const ph = lines.length * lh + 44;
     const px = (W - pw) / 2;
     const py = H - ph - (App.isTouch ? 262 : 50);

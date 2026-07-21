@@ -84,7 +84,7 @@ const Snd = {
   exitOpen()  { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.14, 'square', 0.13, this.now(i * 0.08))); this.tone(55, 0.5, 'sawtooth', 0.10); },
   coin()      { this.tone(988, 0.06, 'square', 0.13); this.tone(1319, 0.16, 'square', 0.13, this.now(0.06)); },
   keyGet()    { [660, 880, 1100].forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.16, this.now(i * 0.07))); },
-  unlock()    { this.noise(0.05, 0.10, 0, 800); this.tone(392, 0.08, 'square', 0.13, this.now(0.06)); this.tone(523, 0.14, 'square', 0.13, this.now(0.13)); },
+  doorUnlock(){ this.noise(0.05, 0.10, 0, 800); this.tone(392, 0.08, 'square', 0.13, this.now(0.06)); this.tone(523, 0.14, 'square', 0.13, this.now(0.13)); },
   cut()       { this.noise(0.10, 0.14, 0, 1600); this.tone(240, 0.08, 'sawtooth', 0.07); },
   snuff()     { this.noise(0.22, 0.12, 0, 900); this.tone(180, 0.18, 'sine', 0.10, 0, 60); },
   crack()     { this.noise(0.14, 0.16, 0, 500); this.tone(150, 0.1, 'square', 0.08, 0, 60); },
@@ -166,6 +166,16 @@ const SONGS = {
       { chord: [57, 60, 64], bass: 33 },
       { chord: [55, 59, 62], bass: 31 }, // G
       { chord: [52, 56, 59], bass: 28 }, // E
+    ],
+  },
+  deep: {
+    bpm: 54, wave: 'triangle', vol: 0.05, bassVol: 0.075,
+    melody: [0, -1, -1, 1, -1, -1, 2, -1],
+    bars: [
+      { chord: [45, 48, 52], bass: 33 }, // Am, very low
+      { chord: [45, 48, 52], bass: 33 },
+      { chord: [44, 47, 51], bass: 32 }, // Ab-ish drift
+      { chord: [43, 47, 50], bass: 31 }, // G
     ],
   },
   shop: {

@@ -35,6 +35,7 @@ const Save = {
         music: true,
         sfx: true,
         reducedFlash: false,
+        haptics: true,
       },
       meta: {
         seenIntro: false,

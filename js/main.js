@@ -23,7 +23,6 @@ const App = {
       menu: ScreenMenu,
       story: ScreenStory,
       settings: ScreenSettings,
-      soon: ScreenSoon,
       game: ScreenGame,
       challenge: ScreenChallenge,
       timed: ScreenTimed,
@@ -42,8 +41,11 @@ const App = {
     requestAnimationFrame(ts => this.loop(ts));
   },
 
+  safeTop: 0,
   resize() {
     const dpr = window.devicePixelRatio || 1;
+    const probe = document.getElementById('safe-probe');
+    this.safeTop = probe ? probe.offsetHeight : 0;
     this.W = window.innerWidth;
     this.H = window.innerHeight;
     this.canvas.width = this.W * dpr;
@@ -77,7 +79,17 @@ const App = {
     this.lastTs = ts;
 
     if (this.screen && this.screen.update) this.screen.update(dt);
-    if (this.screen && this.screen.draw) this.screen.draw(this.ctx, this.W, this.H);
+    if (this.screen && this.screen.draw) {
+      // keep all UI below the notch; the strip above stays background-black
+      if (this.safeTop > 0) {
+        this.ctx.fillStyle = '#08090e';
+        this.ctx.fillRect(0, 0, this.W, this.safeTop);
+      }
+      this.ctx.save();
+      this.ctx.translate(0, this.safeTop);
+      this.screen.draw(this.ctx, this.W, this.H - this.safeTop);
+      this.ctx.restore();
+    }
 
     // fade transition
     if (this.transition) {
@@ -128,7 +140,7 @@ const App = {
       const wasTap = !ptr.moved;
       const { x, y } = ptr;
       ptr = null;
-      if (wasTap && !this.transition && this.screen && this.screen.onTap) this.screen.onTap(x, y);
+      if (wasTap && !this.transition && this.screen && this.screen.onTap) this.screen.onTap(x, y - this.safeTop);
     };
     this.canvas.addEventListener('pointerup', ptrUp);
     this.canvas.addEventListener('pointercancel', () => { ptr = null; });
