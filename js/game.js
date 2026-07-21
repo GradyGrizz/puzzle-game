@@ -63,10 +63,14 @@ const ScreenGame = {
     this.hintPath = null;
     this.pauseList = null;
     this.uiT = 0;
+    this.gearTab = 'equipment';
+    this.gearSel = 0;
     Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
-    // hint scrolls work on story levels (small enough to solve live)
+    // hint scrolls + gear/inventory buttons are story-only (relics)
     const hintBtn = document.getElementById('btn-hint');
     if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
+    document.body.classList.toggle('no-relics', this.gameMode !== 'story');
+    this._pulseGear(false);
     if (this.gameMode === 'story' && this.lv.intro && this.firstTime) {
       this.showDialog(this.lv.intro, () => {});
     }
@@ -105,6 +109,35 @@ const ScreenGame = {
     this.hintPath = { steps, t: 4.5 };
   },
 
+  // ── equipment / inventory subscreens (OoT-style) ──
+  _pulseGear(on) {
+    const b = document.getElementById('btn-gear');
+    if (b) b.classList.toggle('pulse', !!on);
+  },
+  _openGear(tab, selItem) {
+    if (this.gameMode !== 'story') return;
+    if (this.mode !== 'play' && this.mode !== 'moving') return;
+    this.anim = null;
+    this.heldDir = null;
+    this.gearTab = tab;
+    this.gearSel = 0;
+    if (selItem) {
+      const i = GearUI.slots.findIndex(s => s.item === selItem);
+      if (i >= 0) this.gearSel = i;
+    }
+    this.mode = 'gear';
+    this.uiT = 0;
+    this._pulseGear(false);
+    Snd.select();
+  },
+  onGear() { if (this.mode === 'gear') GearUI.setTab(this, 'equipment'); else this._openGear('equipment'); },
+  onBag() { if (this.mode === 'gear') GearUI.setTab(this, 'inventory'); else this._openGear('inventory'); },
+  _closeGear() {
+    this.mode = 'play';
+    this.heldDir = null;
+    Snd.back();
+  },
+
   showDialog(text, cb) {
     this.mode = 'dialog';
     this.dialog = { text: String(text), chars: 0, cb };
@@ -114,7 +147,9 @@ const ScreenGame = {
     this.toast = { text, t: 1.8 };
   },
 
-  inventory() { return Save.data.story.items; },
+  // gameplay abilities come from EQUIPPED relics, not merely owned ones —
+  // you must equip the blade before it cuts, the shield before it wards
+  inventory() { return Save.data.story.equipped; },
 
   movesLeft() { return this.budget ? Math.max(0, this.budget - this.state.moves) : null; },
 
@@ -132,6 +167,12 @@ const ScreenGame = {
         const need = evs.find(e => e.type === 'needItem');
         if (need) {
           if (need.item === 'key') this.showToast('LOCKED. FIND A KEY.');
+          else if (Save.hasItem(need.item) && !Save.isEquipped(need.item)) {
+            // owns it but hasn't equipped it — nudge them to the gear screen
+            const m = { sword: 'EQUIP YOUR BLADE FIRST!', shield: 'RAISE YOUR SHIELD FIRST!', glove: 'EQUIP THE TITAN GLOVE FIRST!' };
+            this.showToast(m[need.item] || 'EQUIP THAT GEAR FIRST!');
+            this._pulseGear(true);
+          }
           else if (need.item === 'sword') this.showToast('TOO THICK. YOU NEED A BLADE.');
           else if (need.item === 'glove') this.showToast('FAR TOO HEAVY TO PUSH.');
           else if (need.item === 'shield') this.showToast('THE FLAMES DRIVE YOU BACK.');
@@ -218,6 +259,7 @@ const ScreenGame = {
     this.holdTimer = 0;
     if (this.mode === 'play') this.attemptMove(dc, dr);
     else if (this.mode === 'moving') this.queued = { dc, dr };
+    else if (this.mode === 'gear') GearUI.onDir(this, dc, dr);
     else if (this.mode === 'paused' && dr) this.pauseList.nav(dr);
     else if ((this.mode === 'results' || this.mode === 'runover') && dr && this.resultInfo) this.resultInfo.list.nav(dr);
   },
@@ -228,12 +270,14 @@ const ScreenGame = {
   onConfirm() {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
+    else if (this.mode === 'gear') GearUI.onConfirm(this);
     else if (this.mode === 'paused') this.pauseList.activate();
     else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.activate();
   },
   onTap(x, y) {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
+    else if (this.mode === 'gear') { if (!GearUI.onTap(this, x, y)) this._closeGear(); }
     else if (this.mode === 'paused') this.pauseList.tapAt(x, y);
     else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.tapAt(x, y);
     else if (this._backBtn) {
@@ -244,6 +288,7 @@ const ScreenGame = {
   },
   onBack() {
     if (this.mode === 'dialog') { this._advanceDialog(); return; }
+    if (this.mode === 'gear') { this._closeGear(); return; }
     if (this.mode === 'paused') { this._resume(); return; }
     if (this.mode !== 'play' && this.mode !== 'moving') return;
     this._pause();
@@ -331,7 +376,8 @@ const ScreenGame = {
   _advanceChest() {
     const ca = this.chestAnim;
     if (!ca || ca.phase < 2) return;
-    Save.grantItem(ca.item);
+    const item = ca.item;
+    Save.grantItem(item);
     this.chestAnim = null;
     this.mode = 'play';
     Snd.select();
@@ -340,6 +386,11 @@ const ScreenGame = {
       this.exitGlow = 1;
       if (!Save.data.settings.reducedFlash) this.flash = 1;
       this.pendingExitOpen = false;
+    }
+    // equippable relic? send the player straight to the gear screen so
+    // the first time you EQUIP it feels deliberate (OoT get-item flow)
+    if (GearUI.slots.some(s => s.item === item) && !Save.isEquipped(item)) {
+      this._openGear('equipment', item);
     }
   },
 
@@ -662,6 +713,7 @@ const ScreenGame = {
     }
     if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.drawResults(ctx, W, H);
     if (this.mode === 'paused') this.drawPause(ctx, W, H);
+    if (this.mode === 'gear') GearUI.draw(this, ctx, W, H);
   },
 
   drawPause(ctx, W, H) {

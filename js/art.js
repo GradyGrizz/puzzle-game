@@ -420,6 +420,23 @@ item(ctx, type, x, y, s) {
     ctx.fillStyle = '#6a5838';
     ctx.fillRect(x + u * 5, y + u * 8, u * 5, u);
     ctx.fillRect(x + u * 5, y + u * 5, u, u * 4);
+  } else if (type === 'sunstone') {
+    // radiant faceted gem
+    const cx = x + s / 2;
+    ctx.fillStyle = '#f0c040';
+    ctx.fillRect(cx - u * 4, y + u * 5, u * 8, u * 6);
+    ctx.fillRect(cx - u * 3, y + u * 3, u * 6, u * 10);
+    ctx.fillRect(cx - u * 2, y + u * 2, u * 4, u * 12);
+    ctx.fillStyle = '#fff0a0';
+    ctx.fillRect(cx - u * 2, y + u * 4, u * 2, u * 6);
+    ctx.fillStyle = '#d88818';
+    ctx.fillRect(cx + u, y + u * 8, u * 2, u * 4);
+    // sun rays
+    ctx.fillStyle = 'rgba(240,200,80,0.5)';
+    ctx.fillRect(cx - u, y, u * 2, u * 2);
+    ctx.fillRect(cx - u, y + u * 13, u * 2, u * 2);
+    ctx.fillRect(x + u, y + s / 2 - u, u * 2, u * 2);
+    ctx.fillRect(x + s - u * 3, y + s / 2 - u, u * 2, u * 2);
   }
 },
 

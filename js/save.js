@@ -13,7 +13,8 @@ const Save = {
       story: {
         // per-level: { done:true, bestMoves:n }
         levels: {},
-        items: {}, // sword, shield, glove, boots, lantern
+        items: {},    // owned relics: sword, shield, glove, lantern, sunstone
+        equipped: {}, // relics equipped (must be equipped to function)
       },
       challenge: {
         best: 0,
@@ -53,7 +54,16 @@ const Save = {
   load() {
     let d = null;
     try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) {}
+    const hadSave = !!d;
     this.data = this._merge(this.defaults(), d || {});
+    // migration: players who already owned relics before the equip system
+    // existed keep functioning — auto-equip everything they own once
+    if (hadSave && !this.data.story.equippedMigrated) {
+      for (const k in this.data.story.items) this.data.story.equipped[k] = true;
+      this.data.story.equippedMigrated = true;
+    } else if (!hadSave) {
+      this.data.story.equippedMigrated = true;
+    }
     this.data.meta.launches++;
     this.write();
     return this.data;
@@ -97,6 +107,20 @@ const Save = {
 
   hasItem(item) { return !!this.data.story.items[item]; },
   grantItem(item) { this.data.story.items[item] = true; this.write(); },
+
+  // ── equipment ──
+  isEquipped(item) { return !!this.data.story.equipped[item]; },
+  setEquipped(item, on) {
+    if (on && !this.hasItem(item)) return;
+    if (on) this.data.story.equipped[item] = true;
+    else delete this.data.story.equipped[item];
+    this.write();
+  },
+  toggleEquip(item) {
+    if (!this.hasItem(item)) return false;
+    this.setEquipped(item, !this.isEquipped(item));
+    return this.isEquipped(item);
+  },
 
   isLevelDone(id) {
     const rec = this.data.story.levels[id];

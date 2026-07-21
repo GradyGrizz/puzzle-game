@@ -72,7 +72,23 @@ body.in-game #controls { display: block; }
   display: flex; flex-direction: column; gap: 10px;
   pointer-events: auto;
 }
+.acts-left {
+  position: absolute;
+  bottom: max(30px, env(safe-area-inset-bottom));
+  left: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: auto;
+}
+body.no-relics .acts-left { display: none; }
 .ab { width: 58px; height: 46px; font-size: 12px; letter-spacing: 1px; }
+.ab.gear { height: 54px; }
+.ab .ab-ico { font-size: 20px; line-height: 1; }
+.ab .ab-lbl { font-size: 9px; letter-spacing: 1px; margin-top: 2px; opacity: 0.8; }
+.ab.pulse { animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse {
+  0%,100% { border-color: rgba(210,170,50,0.55); background: rgba(200,160,40,0.12); }
+  50%     { border-color: rgba(240,200,80,0.95); background: rgba(220,180,60,0.30); }
+}
 </style>
 </head>
 <body>
@@ -83,6 +99,10 @@ body.in-game #controls { display: block; }
     <div></div><div class="dp" id="dp-up" aria-label="Up">&#9650;</div><div></div>
     <div class="dp" id="dp-left" aria-label="Left">&#9664;</div><div></div><div class="dp" id="dp-right" aria-label="Right">&#9654;</div>
     <div></div><div class="dp" id="dp-down" aria-label="Down">&#9660;</div><div></div>
+  </div>
+  <div class="acts-left">
+    <div class="ab gear" id="btn-gear" aria-label="Equipment"><span class="ab-ico">&#9876;</span><span class="ab-lbl">GEAR</span></div>
+    <div class="ab gear" id="btn-bag" aria-label="Inventory"><span class="ab-ico">&#9635;</span><span class="ab-lbl">ITEMS</span></div>
   </div>
   <div class="acts">
     <div class="ab" id="btn-hint" aria-label="Hint">HINT</div>
@@ -99,6 +119,7 @@ body.in-game #controls { display: block; }
 <script src="js/levels.js"></script>
 <script src="js/gen.js"></script>
 <script src="js/screens.js"></script>
+<script src="js/gear.js"></script>
 <script src="js/game.js"></script>
 <script src="js/main.js"></script>
 <script src="js/modes.js"></script>

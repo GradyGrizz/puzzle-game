@@ -180,6 +180,8 @@ const App = {
     bindBtn('btn-undo', () => this.screen && this.screen.onUndo && this.screen.onUndo());
     bindBtn('btn-reset', () => this.screen && this.screen.onReset && this.screen.onReset());
     bindBtn('btn-hint', () => this.screen && this.screen.onHint && this.screen.onHint());
+    bindBtn('btn-gear', () => this.screen && this.screen.onGear && this.screen.onGear());
+    bindBtn('btn-bag', () => this.screen && this.screen.onBag && this.screen.onBag());
 
     // keyboard
     const KEY_DIRS = {
@@ -204,6 +206,10 @@ const App = {
         if (this.screen && this.screen.onUndo) this.screen.onUndo();
       } else if (e.key === 'r' || e.key === 'R') {
         if (this.screen && this.screen.onReset) this.screen.onReset();
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (this.screen && this.screen.onGear) this.screen.onGear();
+      } else if (e.key === 'i' || e.key === 'I') {
+        if (this.screen && this.screen.onBag) this.screen.onBag();
       }
     });
     document.addEventListener('keyup', e => {
