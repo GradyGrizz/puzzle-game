@@ -219,9 +219,9 @@ function stateKey(st) {
 
 function solve(def, inventory, maxNodes) {
   const start = parseLevel(def);
-  if (start.won) return { solvable: true, moves: 0 };
+  if (start.won) return { solvable: true, moves: 0, path: [] };
   const seen = new Set([stateKey(start)]);
-  let frontier = [{ st: start, path: 0 }];
+  let frontier = [{ st: start, path: [] }];
   const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
   let nodes = 0;
   const cap = maxNodes || 400000;
@@ -229,15 +229,15 @@ function solve(def, inventory, maxNodes) {
   while (frontier.length) {
     const next = [];
     depth++;
-    for (const { st } of frontier) {
+    for (const { st, path } of frontier) {
       for (const [dc, dr] of dirs) {
         const res = move(st, dc, dr, inventory);
         if (!res.ok) continue;
-        if (res.state.won) return { solvable: true, moves: depth, nodes };
+        if (res.state.won) return { solvable: true, moves: depth, nodes, path: path.concat([[dc, dr]]) };
         const k = stateKey(res.state);
         if (seen.has(k)) continue;
         seen.add(k);
-        next.push({ st: res.state });
+        next.push({ st: res.state, path: path.concat([[dc, dr]]) });
         if (++nodes > cap) return { solvable: false, reason: 'node-cap', nodes };
       }
     }

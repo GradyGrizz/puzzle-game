@@ -175,8 +175,8 @@ const ScreenMenu = {
     Snd.playMusic('title');
     this.list = new MenuList([
       { label: 'STORY', sub: 'THE SUNKEN KEEP', action: () => App.setScreen('story') },
-      { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', action: () => App.setScreen('soon', { title: 'CHALLENGE' }) },
-      { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', action: () => App.setScreen('soon', { title: 'TIMED RUSH' }) },
+      { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', action: () => App.setScreen('challenge') },
+      { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', action: () => App.setScreen('timed') },
       { label: 'SHOP', sub: 'SPEND YOUR COINS', action: () => App.setScreen('soon', { title: 'SHOP' }) },
       { label: 'SETTINGS', action: () => App.setScreen('settings') },
     ]);

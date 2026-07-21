@@ -92,4 +92,27 @@ const Save = {
     const rec = this.data.story.levels[id];
     return !!(rec && rec.done);
   },
+
+  // ── leaderboards (local device) ──
+  recordChallengeRun(depth, coins) {
+    const runs = this.data.challenge.runs;
+    runs.push({ depth, coins, date: Date.now() });
+    runs.sort((a, b) => b.depth - a.depth || a.date - b.date);
+    if (runs.length > 10) runs.length = 10;
+    this.data.challenge.best = Math.max(this.data.challenge.best || 0, depth);
+    this.write();
+  },
+
+  // returns 1-based rank of this run among bests (0 if not top 10)
+  recordTimedRun(ms) {
+    ms = Math.round(ms);
+    const bests = this.data.timed.bests;
+    const entry = { ms, date: Date.now() };
+    bests.push(entry);
+    bests.sort((a, b) => a.ms - b.ms);
+    if (bests.length > 10) bests.length = 10;
+    this.write();
+    const i = bests.indexOf(entry);
+    return i >= 0 ? i + 1 : 0;
+  },
 };

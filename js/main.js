@@ -25,6 +25,8 @@ const App = {
       settings: ScreenSettings,
       soon: ScreenSoon,
       game: ScreenGame,
+      challenge: ScreenChallenge,
+      timed: ScreenTimed,
     };
 
     this.resize();

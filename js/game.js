@@ -1,25 +1,51 @@
 'use strict';
 // ── Game screen: plays one puzzle level with anims + sfx ──────
+// Supports three game modes:
+//   story     — handcrafted campaign levels with dialogs/chests
+//   challenge — endless generated depths with a move budget
+//   timed     — 5-stage generated gauntlet against the clock
 
 const MOVE_MS = 150;
 
 const ScreenGame = {
-  // mode: dialog | play | moving | chest | won | results
+  // mode: dialog | play | moving | chest | won | results | runover
   enter(params) {
-    const found = getStoryLevel(params.levelId);
-    this.chapter = found.chapter;
-    this.lv = found.level;
-    this.levelId = this.lv.id;
-    this.firstTime = !Save.isLevelDone(this.levelId);
+    this.gameMode = params.gameMode || 'story';
+    this.run = params.run || null;
+
+    if (this.gameMode === 'story') {
+      const found = getStoryLevel(params.levelId);
+      this.chapter = found.chapter;
+      this.lv = found.level;
+      this.levelId = this.lv.id;
+      this.firstTime = !Save.isLevelDone(this.levelId);
+      this.budget = 0;
+    } else if (this.gameMode === 'challenge') {
+      let g = App.pregen && App.pregen.depth === this.run.depth && App.pregen.seed === this.run.seed
+        ? App.pregen.gen : genLevel(this.run.depth, this.run.seed);
+      App.pregen = null;
+      this.lv = { id: 'DEPTH ' + this.run.depth, name: '', map: g.def.map };
+      this.levelId = this.lv.id;
+      this.firstTime = false;
+      this.budget = g.budget;
+    } else { // timed
+      const g = this.run.defs[this.run.idx];
+      this.lv = { id: 'STAGE ' + (this.run.idx + 1) + '/' + this.run.defs.length, name: '', map: g.def.map };
+      this.levelId = this.lv.id;
+      this.firstTime = false;
+      this.budget = 0;
+      this.levelMs = 0;
+    }
+
     this.state = parseLevel(this.lv);
     this.history = [];
-    this.filled = {};       // "r,c" -> true (sunken block, visual only)
+    this.filled = {};
     this.mode = 'play';
     this.t = 0;
-    this.anim = null;       // move tween
-    this.fallAnim = null;   // {r,c,t}
-    this.cutAnim = null;    // {r,c,t} bush slash
-    this.chestAnim = null;  // {phase, t, item}
+    this.anim = null;
+    this.fallAnim = null;
+    this.cutAnim = null;
+    this.chestAnim = null;
     this.dialog = null;
     this.toast = null;
     this.flash = 0;
@@ -28,10 +54,11 @@ const ScreenGame = {
     this.queued = null;
     this.holdTimer = 0;
     this.wonT = 0;
-    this.resultList = null;
+    this.resultInfo = null;
     this.frame = 0;
+    this._awarded = false;
     Snd.playMusic('dungeon');
-    if (this.lv.intro && this.firstTime) {
+    if (this.gameMode === 'story' && this.lv.intro && this.firstTime) {
       this.showDialog(this.lv.intro, () => {});
     }
   },
@@ -46,6 +73,8 @@ const ScreenGame = {
   },
 
   inventory() { return Save.data.story.items; },
+
+  movesLeft() { return this.budget ? Math.max(0, this.budget - this.state.moves) : null; },
 
   // ── input ──
   attemptMove(dc, dr, fromRepeat) {
@@ -68,7 +97,6 @@ const ScreenGame = {
       return;
     }
 
-    // chest bump: no movement, run cutscene
     if (has('chest')) {
       this.history.push(this.state);
       this.state = res.state;
@@ -80,7 +108,6 @@ const ScreenGame = {
       return;
     }
 
-    // bush cut: no movement
     if (has('cut')) {
       this.history.push(this.state);
       this.state = res.state;
@@ -90,18 +117,11 @@ const ScreenGame = {
       return;
     }
 
-    // start tween
     const from = { r: this.state.player.r, c: this.state.player.c };
-    const to = { r: res.state.player.r, c: res.state.player.c };
     const pushEv = evs.find(e => e.type === 'push');
     this.history.push(this.state);
     if (this.history.length > 300) this.history.shift();
-    this.anim = {
-      from, to, t: 0,
-      push: pushEv || null,
-      events: evs,
-      newState: res.state,
-    };
+    this.anim = { from, t: 0, push: pushEv || null, events: evs, newState: res.state };
     this.mode = 'moving';
     if (evs.some(e => e.type === 'unlock')) Snd.unlock();
     if (evs.some(e => e.type === 'crackBreak')) Snd.crack();
@@ -135,7 +155,11 @@ const ScreenGame = {
       Snd.fanfare();
       return;
     }
-    // continue held/queued input
+    // challenge: out of moves ends the run
+    if (this.gameMode === 'challenge' && this.movesLeft() === 0) {
+      this._runOver();
+      return;
+    }
     if (this.queued) {
       const q = this.queued; this.queued = null;
       this.attemptMove(q.dc, q.dr);
@@ -149,7 +173,7 @@ const ScreenGame = {
     this.holdTimer = 0;
     if (this.mode === 'play') this.attemptMove(dc, dr);
     else if (this.mode === 'moving') this.queued = { dc, dr };
-    else if (this.mode === 'results' && dr) this.resultList.nav(dr);
+    else if ((this.mode === 'results' || this.mode === 'runover') && dr && this.resultInfo) this.resultInfo.list.nav(dr);
   },
   onDirRelease(dc, dr) {
     if (this.heldDir && this.heldDir.dc === dc && this.heldDir.dr === dr) this.heldDir = null;
@@ -158,26 +182,32 @@ const ScreenGame = {
   onConfirm() {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
-    else if (this.mode === 'results') this.resultList.activate();
+    else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.activate();
   },
   onTap(x, y) {
     if (this.mode === 'dialog') this._advanceDialog();
     else if (this.mode === 'chest') this._advanceChest();
-    else if (this.mode === 'results') this.resultList.tapAt(x, y);
+    else if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.resultInfo.list.tapAt(x, y);
     else if (y < 44 && x < 90) this.onBack();
   },
   onBack() {
     if (this.mode === 'dialog') { this._advanceDialog(); return; }
     Snd.back();
-    App.setScreen('story');
+    if (this.gameMode === 'challenge') {
+      // leaving mid-run ends the run (score = depths fully cleared)
+      this._recordChallenge();
+      App.setScreen('challenge');
+    } else if (this.gameMode === 'timed') {
+      App.setScreen('timed');
+    } else {
+      App.setScreen('story');
+    }
   },
   onUndo() {
     if (this.mode !== 'play' && this.mode !== 'moving') return;
     if (!this.history.length) { Snd.error(); return; }
     this.anim = null; this.fallAnim = null;
     this.state = this.history.pop();
-    // rebuild filled markers is impossible from state alone; recompute:
-    // any tile that was crack/pit in the source map but FLOOR now was filled
     this._recomputeFilled();
     this.mode = 'play';
     Snd.undo();
@@ -208,15 +238,12 @@ const ScreenGame = {
     Snd.select();
     this.dialog = null;
     this.mode = 'play';
-    const cb = d.cb;
-    if (cb) cb();
+    if (d.cb) d.cb();
   },
 
   _advanceChest() {
     const ca = this.chestAnim;
-    if (!ca) return;
-    if (ca.phase < 2) return; // still animating
-    // banner shown -> dismiss
+    if (!ca || ca.phase < 2) return;
     Save.grantItem(ca.item);
     this.chestAnim = null;
     this.mode = 'play';
@@ -229,18 +256,108 @@ const ScreenGame = {
     }
   },
 
+  // ── mode results ──
   _enterResults() {
+    if (this.gameMode === 'challenge') return this._challengeClear();
+    if (this.gameMode === 'timed') return this._timedClear();
     const first = this.firstTime && !this._awarded;
     const coins = 5 + this.state.coinsGot + (first ? 10 : 0);
     this._awarded = true;
-    this.earned = { base: 5, collected: this.state.coinsGot, bonus: first ? 10 : 0, total: coins };
     Save.completeStoryLevel(this.levelId, this.state.moves, coins);
     const next = nextStoryLevel(this.levelId);
     const items = [];
     if (next) items.push({ label: 'NEXT LEVEL', action: () => App.setScreen('game', { levelId: next.id }) });
     items.push({ label: 'LEVEL SELECT', action: () => App.setScreen('story') });
-    this.resultList = new MenuList(items);
+    let coinLine = 'COINS +' + coins;
+    if (first) coinLine += ' (FIRST CLEAR +10)';
+    this.resultInfo = {
+      title: 'LEVEL CLEAR', sub: this.lv.name,
+      lines: ['MOVES: ' + this.state.moves, coinLine],
+      list: new MenuList(items),
+    };
     this.mode = 'results';
+  },
+
+  _challengeClear() {
+    const run = this.run;
+    if (!this._awarded) {
+      this._awarded = true;
+      const coins = 3 + this.state.coinsGot;
+      run.cleared = run.depth;
+      run.coins += coins;
+      Save.addCoins(coins);
+      // pregenerate the next depth while the player reads results
+      const nd = run.depth + 1, seed = run.seed;
+      App.pregen = null;
+      setTimeout(() => { App.pregen = { depth: nd, seed, gen: genLevel(nd, seed) }; }, 30);
+    }
+    this.resultInfo = {
+      title: 'DEPTH ' + run.depth + ' CLEARED', sub: 'THE STAIRS SPIRAL DOWN...',
+      lines: ['MOVES: ' + this.state.moves + ' / ' + this.budget, 'RUN COINS: ' + run.coins],
+      list: new MenuList([
+        { label: 'DELVE DEEPER', action: () => { run.depth++; App.setScreen('game', { gameMode: 'challenge', run }); } },
+        { label: 'END RUN', action: () => { this._recordChallenge(); App.setScreen('challenge'); } },
+      ]),
+    };
+    this.mode = 'results';
+  },
+
+  _recordChallenge() {
+    if (this.run && this.run.cleared > 0 && !this.run.recorded) {
+      this.run.recorded = true;
+      Save.recordChallengeRun(this.run.cleared, this.run.coins);
+    }
+  },
+
+  _runOver() {
+    Snd.timeUp();
+    this._recordChallenge();
+    const run = this.run;
+    this.resultInfo = {
+      title: 'OUT OF MOVES', sub: 'THE SEAL SNAPS SHUT AT DEPTH ' + run.depth,
+      lines: ['DEPTHS CLEARED: ' + run.cleared, 'COINS EARNED: ' + run.coins,
+              (Save.data.challenge.best === run.cleared && run.cleared > 0) ? 'NEW BEST!' : ''],
+      list: new MenuList([
+        { label: 'NEW RUN', action: () => App.startChallenge() },
+        { label: 'LEADERBOARD', action: () => App.setScreen('challenge') },
+      ]),
+    };
+    this.mode = 'runover';
+  },
+
+  _timedClear() {
+    const run = this.run;
+    if (!this._awarded) {
+      this._awarded = true;
+      run.totalMs += this.levelMs;
+      run.coins += this.state.coinsGot;
+      run.splits.push(this.levelMs);
+    }
+    if (run.idx < run.defs.length - 1) {
+      this.resultInfo = {
+        title: 'STAGE ' + (run.idx + 1) + ' CLEAR', sub: fmtMs(this.levelMs),
+        lines: ['TOTAL: ' + fmtMs(run.totalMs)],
+        list: new MenuList([
+          { label: 'NEXT STAGE', action: () => { run.idx++; App.setScreen('game', { gameMode: 'timed', run }); } },
+        ]),
+      };
+      this.mode = 'results';
+      // auto-advance keeps the rush feeling
+      this._autoNext = 1.1;
+    } else {
+      const bonus = 12 + run.coins;
+      Save.addCoins(bonus);
+      const rank = Save.recordTimedRun(run.totalMs);
+      this.resultInfo = {
+        title: 'RUN COMPLETE', sub: 'TOTAL ' + fmtMs(run.totalMs),
+        lines: ['COINS +' + bonus, rank === 1 ? 'NEW RECORD!' : (rank > 0 ? 'RANK #' + rank : '')],
+        list: new MenuList([
+          { label: 'RACE AGAIN', action: () => App.startTimed() },
+          { label: 'LEADERBOARD', action: () => App.setScreen('timed') },
+        ]),
+      };
+      this.mode = 'results';
+    }
   },
 
   // ── update ──
@@ -252,6 +369,18 @@ const ScreenGame = {
     if (this.fallAnim) { this.fallAnim.t += dt; if (this.fallAnim.t > 0.3) this.fallAnim = null; }
     if (this.cutAnim) { this.cutAnim.t -= dt; if (this.cutAnim.t <= 0) this.cutAnim = null; }
 
+    if (this.gameMode === 'timed' && (this.mode === 'play' || this.mode === 'moving')) {
+      this.levelMs += dt * 1000;
+    }
+    if (this._autoNext != null && this.mode === 'results') {
+      this._autoNext -= dt;
+      if (this._autoNext <= 0) {
+        this._autoNext = null;
+        this.resultInfo.list.activate();
+        return;
+      }
+    }
+
     if (this.mode === 'dialog' && this.dialog) {
       this.dialog.chars = Math.min(this.dialog.text.length, this.dialog.chars + dt * 46);
     }
@@ -261,7 +390,6 @@ const ScreenGame = {
       this.frame = 1 + Math.floor((this.anim.t / MOVE_MS) * 3.99) % 4;
       if (this.anim.t >= MOVE_MS) { this.frame = 0; this.settleMove(); }
     } else if (this.mode === 'play') {
-      // held-direction repeat (handles bumps against walls gracefully)
       if (this.heldDir) {
         this.holdTimer += dt;
         if (this.holdTimer > 0.16) { this.holdTimer = 0; this.attemptMove(this.heldDir.dc, this.heldDir.dr, true); }
@@ -277,8 +405,8 @@ const ScreenGame = {
 
     if (this.mode === 'won') {
       this.wonT += dt;
-      if (this.wonT > 1.15) {
-        if (this.lv.outro && this.firstTime) {
+      if (this.wonT > (this.gameMode === 'timed' ? 0.6 : 1.15)) {
+        if (this.gameMode === 'story' && this.lv.outro && this.firstTime) {
           const outro = this.lv.outro;
           this.lv = Object.assign({}, this.lv, { outro: null });
           this.showDialog(outro, () => this._enterResults());
@@ -301,14 +429,12 @@ const ScreenGame = {
     const by = hudH + Math.floor((H - hudH - botH - T * st.h) / 2);
     this._board = { bx, by, T };
 
-    // tiles
     for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
       const x = bx + c * T, y = by + r * T, t = st.tiles[r][c];
       if (t === TILE.WALL) Art.wall(ctx, x, y, T);
       else if (t === TILE.FLOOR) {
         Art.floor(ctx, x, y, T);
         if (this.filled[r + ',' + c]) {
-          // sunken block resting in the filled hole
           ctx.save(); ctx.globalAlpha = 0.55;
           Art.blockRaw(ctx, x, y, T, 0.85);
           ctx.restore();
@@ -322,7 +448,6 @@ const ScreenGame = {
       else if (t === TILE.BUSH) Art.bush(ctx, x, y, T);
     }
 
-    // items
     for (const k in st.items) {
       const [r, c] = k.split(',').map(Number);
       const x = bx + c * T, y = by + r * T;
@@ -330,18 +455,16 @@ const ScreenGame = {
       else if (st.items[k] === 'key') Art.key(ctx, x, y, T, this.t * 4 + r);
     }
 
-    // chest
     if (st.chest && st.chest.r >= 0) {
       let phase = st.chest.opened ? 1 : 0;
       if (this.chestAnim && this.chestAnim.phase === 0) phase = Math.min(1, this.chestAnim.t / 0.5);
       Art.chest(ctx, bx + st.chest.c * T, by + st.chest.r * T, T, phase);
     }
 
-    // blocks (skip one being pushed — drawn interpolated)
-    const pushEv = (this.anim && this.anim.push) || null;
     for (const b of st.blocks) {
       Art.block(ctx, bx + b.c * T, by + b.r * T, T, false);
     }
+    const pushEv = (this.anim && this.anim.push) || null;
     if (pushEv && this.anim) {
       const pr = this.anim.t / MOVE_MS;
       const br = pushEv.fr + (pushEv.tr - pushEv.fr) * pr;
@@ -349,7 +472,6 @@ const ScreenGame = {
       Art.block(ctx, Math.round(bx + bc * T), Math.round(by + br * T), T, false);
     }
 
-    // falling block (into pit/crack)
     if (this.fallAnim) {
       const f = this.fallAnim;
       const sc = Math.max(0.1, 1 - f.t / 0.3);
@@ -357,31 +479,29 @@ const ScreenGame = {
       Art.blockRaw(ctx, bx + f.c * T, by + f.r * T, T, sc);
     }
 
-    // bush cut particles
     if (this.cutAnim) {
       const ca = this.cutAnim;
       const x = bx + ca.c * T, y = by + ca.r * T;
       ctx.fillStyle = PAL.greenHi;
-      const n = 6;
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
         const d = (0.25 - ca.t) * T * 2.4;
         ctx.fillRect(x + T / 2 + Math.cos(a) * d, y + T / 2 + Math.sin(a) * d, 3, 3);
       }
     }
 
-    // hero
     let hr = st.player.r, hc = st.player.c;
     let pushing = false;
     if (this.anim) {
       const pr = this.anim.t / MOVE_MS;
-      hr = this.anim.from.r + (this.anim.to.r - this.anim.from.r) * pr;
-      hc = this.anim.from.c + (this.anim.to.c - this.anim.from.c) * pr;
+      const np = this.anim.newState.player;
+      hr = this.anim.from.r + (np.r - this.anim.from.r) * pr;
+      hc = this.anim.from.c + (np.c - this.anim.from.c) * pr;
       pushing = !!this.anim.push;
     }
-    Art.hero(ctx, st.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
+    const animSt = this.anim ? this.anim.newState : st;
+    Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
 
-    // flash
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(240,180,40,${this.flash * 0.16})`;
       ctx.fillRect(0, 0, W, H);
@@ -405,7 +525,7 @@ const ScreenGame = {
       ctx.fillStyle = `rgba(2,3,6,${a})`; ctx.fillRect(0, 0, W, H);
       drawText(ctx, 'CLEAR!', W / 2, H * 0.4, 5, PAL.goldHi, 'center', '#3a2808');
     }
-    if (this.mode === 'results') this.drawResults(ctx, W, H);
+    if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.drawResults(ctx, W, H);
   },
 
   drawHud(ctx, W, H, hudH) {
@@ -413,15 +533,23 @@ const ScreenGame = {
     ctx.fillRect(0, 0, W, hudH);
     ctx.fillStyle = PAL.uiDark; ctx.fillRect(0, hudH - 1, W, 1);
     drawText(ctx, '◀', 16, 16, 2, PAL.uiDim, 'left');
-    drawText(ctx, this.levelId + ' ' + this.lv.name, W / 2, 10, 2, PAL.ui, 'center', '#000');
-    drawText(ctx, 'MOVES ' + this.state.moves, W / 2, 30, 1, PAL.uiDim, 'center');
-    coinsBadge(ctx, W - 12, 14, Save.data.coins + this.state.coinsGot, 2);
+    const title = this.gameMode === 'story' ? this.levelId + ' ' + this.lv.name : this.levelId;
+    drawText(ctx, title, W / 2, 10, 2, PAL.ui, 'center', '#000');
+    if (this.gameMode === 'challenge') {
+      const left = this.movesLeft();
+      const urgent = left != null && left <= 5;
+      drawText(ctx, 'MOVES LEFT ' + left, W / 2, 30, 1, urgent ? PAL.red : PAL.uiDim, 'center');
+    } else if (this.gameMode === 'timed') {
+      drawText(ctx, fmtMs(this.levelMs + 0) + '  TOTAL ' + fmtMs(this.run.totalMs + this.levelMs), W / 2, 30, 1, PAL.goldHi, 'center');
+    } else {
+      drawText(ctx, 'MOVES ' + this.state.moves, W / 2, 30, 1, PAL.uiDim, 'center');
+    }
+    coinsBadge(ctx, W - 12, 14, Save.data.coins + (this.gameMode === 'story' ? this.state.coinsGot : 0), 2);
     if (this.state.keys > 0) {
       Art.keyIcon(ctx, W - 110, 12, 16);
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');
     }
-    // first-time hint below hud
-    if (this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6) {
+    if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6) {
       drawText(ctx, this.lv.hint, W / 2, hudH + 6, 1, PAL.gold, 'center', '#000');
     }
   },
@@ -439,9 +567,8 @@ const ScreenGame = {
     let ty = py + 18;
     for (const ln of lines) {
       if (shown <= 0) break;
-      const seg = ln.slice(0, shown);
+      drawText(ctx, ln.slice(0, shown), px + 18, ty, s, PAL.ui, 'left');
       shown -= ln.length + 1;
-      drawText(ctx, seg, px + 18, ty, s, PAL.ui, 'left');
       ty += lh;
     }
     if (this.dialog.chars >= this.dialog.text.length && Math.floor(this.t * 2) % 2 === 0) {
@@ -456,14 +583,11 @@ const ScreenGame = {
     const b = this._board;
     const st = this.state;
     const cx = b.bx + st.chest.c * b.T, cy = b.by + st.chest.r * b.T;
-    // redraw chest above dim
     Art.chest(ctx, cx, cy, b.T, ca.phase === 0 ? Math.min(1, ca.t / 0.5) : 1);
-    // item rising
     if (ca.phase >= 1) {
       const rise = ca.phase === 1 ? Math.min(1, ca.t / 0.7) : 1;
       const iy = cy - rise * b.T * 1.1;
       const size = b.T * 0.9;
-      // glow
       ctx.fillStyle = `rgba(240,200,80,${0.25 + 0.1 * Math.sin(this.t * 6)})`;
       ctx.beginPath();
       ctx.arc(cx + b.T / 2, iy + size / 2, size * 0.75, 0, Math.PI * 2);
@@ -485,18 +609,27 @@ const ScreenGame = {
 
   drawResults(ctx, W, H) {
     ctx.fillStyle = 'rgba(2,3,6,0.72)'; ctx.fillRect(0, 0, W, H);
+    const ri = this.resultInfo;
     const s = Math.max(2, Math.floor(W / 240));
-    const pw = Math.min(W - 32, 420), ph = 300;
+    const pw = Math.min(W - 32, 420), ph = 310;
     const px = (W - pw) / 2, py = Math.max(30, H * 0.14);
     Art.panel(ctx, px, py, pw, ph);
-    drawText(ctx, 'LEVEL CLEAR', W / 2, py + 20, s + 1, PAL.goldHi, 'center', '#000');
-    drawText(ctx, this.lv.name, W / 2, py + 20 + 9 * (s + 1), Math.max(1, s - 1), PAL.uiDim, 'center');
-    let ty = py + 78;
-    drawText(ctx, 'MOVES: ' + this.state.moves, W / 2, ty, s, PAL.ui, 'center'); ty += 11 * s;
-    const e = this.earned;
-    let coinLine = 'COINS +' + e.total;
-    if (e.bonus) coinLine += ' (FIRST CLEAR +' + e.bonus + ')';
-    drawText(ctx, coinLine, W / 2, ty, s, PAL.goldHi, 'center'); ty += 12 * s;
-    this.resultList.draw(ctx, W / 2, py + ph - 118, pw - 60, 44, s);
+    const titleCol = this.mode === 'runover' ? PAL.red : PAL.goldHi;
+    drawText(ctx, ri.title, W / 2, py + 20, s + 1, titleCol, 'center', '#000');
+    if (ri.sub) drawText(ctx, ri.sub, W / 2, py + 20 + 9 * (s + 1), Math.max(1, s - 1), PAL.uiDim, 'center');
+    let ty = py + 84;
+    for (const ln of ri.lines) {
+      if (ln) drawText(ctx, ln, W / 2, ty, s, ln.includes('NEW') ? PAL.goldHi : PAL.ui, 'center');
+      ty += 11 * s;
+    }
+    ri.list.draw(ctx, W / 2, py + ph - 122, pw - 60, 44, s);
   },
 };
+
+function fmtMs(ms) {
+  ms = Math.max(0, Math.round(ms));
+  const m = Math.floor(ms / 60000);
+  const sec = Math.floor((ms % 60000) / 1000);
+  const t = Math.floor((ms % 1000) / 100);
+  return m + ':' + String(sec).padStart(2, '0') + '.' + t;
+}
