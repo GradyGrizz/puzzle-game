@@ -69,7 +69,7 @@ const ScreenShop = {
       }
       // buy flow with tap-again confirm
       if (this.confirmId !== row.id) {
-        if (Save.data.coins < row.price) { Snd.error(); this._say('NOT ENOUGH COINS'); return; }
+        if (!Save.canAfford(row.price)) { Snd.error(); this._say("NOT ENOUGH COINS"); return; }
         this.confirmId = row.id;
         Snd.blip();
         return;
@@ -89,7 +89,7 @@ const ScreenShop = {
     }
     if (row.kind === 'hints') {
       if (this.confirmId !== row.id) {
-        if (Save.data.coins < row.price) { Snd.error(); this._say('NOT ENOUGH COINS'); return; }
+        if (!Save.canAfford(row.price)) { Snd.error(); this._say("NOT ENOUGH COINS"); return; }
         this.confirmId = row.id;
         Snd.blip();
         return;
@@ -221,7 +221,7 @@ const ScreenShop = {
       else if (state === 'soldout') { label = 'DONE TODAY'; col = PAL.uiDim; }
       else if (state === 'iap') { label = ''; }
       else if (row.kind === 'ad') { label = 'FREE'; col = PAL.goldHi; }
-      else { label = '● ' + row.price; col = Save.data.coins >= row.price ? PAL.goldHi : PAL.red; }
+      else { label = '● ' + row.price; col = Save.canAfford(row.price) ? PAL.goldHi : PAL.red; }
       const statusS = pw < 330 ? 1 : s;
       let statusW = 0;
       if (label) {

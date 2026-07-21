@@ -533,6 +533,7 @@ function nextStoryLevel(id) {
 
 // a story level is unlocked if it's the first, or the previous is done
 function isLevelUnlocked(id, save) {
+  if (save.devOn && save.devOn()) return true;   // dev mode: no level locks
   const all = allStoryLevels();
   const i = all.findIndex(l => l.id === id);
   if (i <= 0) return true;

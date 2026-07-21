@@ -106,7 +106,7 @@ class MenuList {
 }
 
 function coinsBadge(ctx, x, y, n, s) {
-  const txt = String(n);
+  const txt = (Save.devOn && Save.devOn()) ? '∞' : String(n);
   const w = textWidth(txt, s) + 14 * s;
   Art.coinIcon(ctx, x - w, y, 7 * s);
   drawText(ctx, txt, x - w + 10 * s, y + s, s, PAL.goldHi, 'left', '#000');
@@ -403,15 +403,12 @@ const ScreenStory = {
 // Secret dev-mode code. Client-side only — anyone reading the JS can find
 // it, so it's obscurity (hidden entry + code), not real security. Change
 // it here anytime. '3358' spells DELV on a phone keypad (D3 E3 L5 V8).
-const DEV_CODE = '3358';
-
 const ScreenSettings = {
   t: 0, sel: 0, scrollY: 0, confirmWipe: false, toast: null,
-  pad: null, verTaps: 0, verT: 0, verRect: null,
 
   enter() {
     this.t = 0; this.scrollY = 0; this.confirmWipe = false;
-    this.toast = null; this.pad = null; this.verTaps = 0; this.verT = 0;
+    this.toast = null;
     this._build();
     this.sel = this.rows.findIndex(r => r.type !== 'header');
   },
@@ -431,21 +428,30 @@ const ScreenSettings = {
     rows.push({ type: 'toggle', label: 'HAPTICS', get: () => s.haptics, set: v => { s.haptics = v; Save.write(); if (v) Platform.haptic(); } });
     rows.push({ type: 'toggle', label: 'REDUCED FLASH', get: () => s.reducedFlash, set: v => { s.reducedFlash = v; Save.write(); } });
     rows.push({ type: 'toggle', label: 'TUTORIAL TIPS', get: () => s.tips !== false, set: v => { s.tips = v; Save.write(); } });
-    if (Save.data.dev.unlocked) {
-      rows.push({ type: 'header', label: 'DEVELOPER' });
-      rows.push({ type: 'button', label: 'DEV TOOLS', gold: true, action: () => { Snd.select(); App.setScreen('dev'); } });
-    }
     rows.push({ type: 'header', label: 'ACCOUNT' });
     rows.push({ type: 'button', label: this.confirmWipe ? 'TAP AGAIN TO ERASE ALL' : 'RESET PROGRESS', danger: true, action: () => this._reset() });
     rows.push({ type: 'button', label: 'LOG OUT', disabled: true, action: () => this._say('ACCOUNTS ARE COMING SOON.') });
+    // ── developer mode (separate save profile; account-gated at launch) ──
+    rows.push({ type: 'header', label: 'DEVELOPER' });
+    rows.push({ type: 'toggle', label: 'DEVELOPER MODE', get: () => Save.devOn(), set: v => this._setDev(v) });
+    if (Save.devOn()) rows.push({ type: 'button', label: 'DEV TOOLS', gold: true, action: () => { Snd.select(); App.setScreen('dev'); } });
     this.rows = rows;
+  },
+
+  _setDev(on) {
+    Save.setDevMode(on);          // swaps to the separate dev/normal profile
+    Snd.syncVolumes();
+    Art.setSkin(Save.data.shop.skin);
+    Art.setTheme(Save.data.shop.theme);
+    Snd.select();
+    this.confirmWipe = false;
+    this._build();
+    this._say(on ? 'DEVELOPER MODE ON — SEPARATE PROFILE' : 'DEVELOPER MODE OFF');
   },
 
   _reset() {
     if (!this.confirmWipe) { this.confirmWipe = true; Snd.blip(); this._build(); return; }
-    const wasDev = Save.data.dev.unlocked;   // keep dev access across a progress wipe
-    Save.wipe();
-    Save.data.dev.unlocked = wasDev; Save.write();
+    Save.wipe();                  // wipes only the active profile
     Snd.syncVolumes();
     Art.setSkin(Save.data.shop.skin);
     Art.setTheme(Save.data.shop.theme);
@@ -460,8 +466,6 @@ const ScreenSettings = {
   update(dt) {
     this.t += dt;
     if (this.toast) { this.toast.t -= dt; if (this.toast.t <= 0) this.toast = null; }
-    if (this.verT > 0) { this.verT -= dt; if (this.verT <= 0) this.verTaps = 0; }
-    if (this.pad && this.pad.shake > 0) this.pad.shake = Math.max(0, this.pad.shake - dt * 6);
   },
 
   // ── layout (scrollable card list) ──
@@ -556,79 +560,17 @@ const ScreenSettings = {
       ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(W - 5, barY, 3, barH);
     }
 
-    // version string (tap 7x to reveal the code pad) — sits at the very bottom
-    const vy = H - 22;
-    this.verRect = { x: W / 2 - 60, y: vy - 4, w: 120, h: 22 };
-    drawText(ctx, 'DELVE V1.0', W / 2, vy, 1, PAL.uiDark, 'center');
+    drawText(ctx, 'DELVE V1.0', W / 2, H - 22, 1, PAL.uiDark, 'center');
 
     if (this.toast) {
       const tw = textWidth(this.toast.text, 2) + 24;
-      ctx.fillStyle = 'rgba(4,5,10,0.94)'; ctx.fillRect((W - tw) / 2, H - 96, tw, 28);
-      drawTextFit(ctx, this.toast.text, W / 2, H - 89, tw - 16, 2, PAL.goldHi, 'center');
-    }
-
-    if (this.pad) this._drawPad(ctx, W, H, s);
-  },
-
-  // ── code keypad overlay ──
-  _drawPad(ctx, W, H, s) {
-    ctx.fillStyle = 'rgba(2,3,6,0.92)'; ctx.fillRect(0, 0, W, H);
-    const pw = Math.min(W - 48, 300), ph = 360;
-    const shake = this.pad.shake > 0 ? Math.round(Math.sin(this.pad.shake * 40) * 5) : 0;
-    const px = (W - pw) / 2 + shake, py = (H - ph) / 2;
-    Art.panel(ctx, px, py, pw, ph);
-    drawText(ctx, 'ENTER CODE', W / 2 + shake, py + 20, s, PAL.goldHi, 'center', '#000');
-    // digit dots
-    const n = 4, dgap = 30, dx0 = W / 2 - (n - 1) * dgap / 2 + shake;
-    for (let i = 0; i < n; i++) {
-      const filled = i < this.pad.digits.length;
-      ctx.fillStyle = filled ? PAL.goldHi : 'rgba(255,255,255,0.14)';
-      const cx = dx0 + i * dgap;
-      if (filled) ctx.fillRect(cx - 8, py + 52, 16, 16);
-      else ctx.fillRect(cx - 8, py + 66, 16, 3);
-    }
-    // keypad 3x4
-    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLR', '0', 'DEL'];
-    const kw = (pw - 48) / 3, kh = 52, kx0 = px + 24, ky0 = py + 92;
-    this.pad.rects = [];
-    for (let i = 0; i < keys.length; i++) {
-      const r = Math.floor(i / 3), c = i % 3;
-      const kx = kx0 + c * kw, ky = ky0 + r * (kh + 6);
-      this.pad.rects.push({ x: kx, y: ky, w: kw - 6, h: kh, key: keys[i] });
-      ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(kx, ky, kw - 6, kh);
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(kx, ky, kw - 6, 2); ctx.fillRect(kx, ky + kh - 2, kw - 6, 2);
-      ctx.fillRect(kx, ky, 2, kh); ctx.fillRect(kx + kw - 8, ky, 2, kh);
-      const isWord = keys[i].length > 1;
-      drawText(ctx, keys[i], kx + (kw - 6) / 2, ky + kh / 2 - (isWord ? 3 : 6), isWord ? 1 : s, isWord ? PAL.uiDim : PAL.ui, 'center');
-    }
-    drawText(ctx, 'TAP OUTSIDE TO CANCEL', W / 2 + shake, py + ph - 18, 1, PAL.uiDim, 'center');
-  },
-
-  _padKey(k) {
-    if (k === 'CLR') { this.pad.digits = ''; Snd.blip(); return; }
-    if (k === 'DEL') { this.pad.digits = this.pad.digits.slice(0, -1); Snd.blip(); return; }
-    if (this.pad.digits.length >= 4) return;
-    this.pad.digits += k; Snd.blip();
-    if (this.pad.digits.length === 4) {
-      if (this.pad.digits === DEV_CODE) {
-        Save.data.dev.unlocked = true; Save.write();
-        Snd.itemGet();
-        this.pad = null;
-        this._build();
-        this.sel = this.rows.findIndex(r => r.label === 'DEV TOOLS');
-        this._ensureVisible();
-        this._say('DEV MODE UNLOCKED');
-      } else {
-        Snd.error();
-        this.pad.shake = 1; this.pad.digits = '';
-      }
+      ctx.fillStyle = 'rgba(4,5,10,0.94)'; ctx.fillRect((W - tw) / 2, H - 96, Math.min(tw, W - 20), 28);
+      drawTextFit(ctx, this.toast.text, W / 2, H - 89, W - 36, 2, PAL.goldHi, 'center');
     }
   },
 
   // ── input ──
   onDirPress(dc, dr) {
-    if (this.pad) return;
     if (dr) {
       let i = this.sel;
       do { i += dr; } while (i >= 0 && i < this.rows.length && !this._focusable(i));
@@ -643,33 +585,16 @@ const ScreenSettings = {
   },
   onDirRelease() {},
   onConfirm() {
-    if (this.pad) return;
     const row = this.rows[this.sel];
     if (!row) return;
     if (row.type === 'toggle') { row.set(!row.get()); Snd.select(); this.confirmWipe = false; this._build(); }
     else if (row.type === 'button') row.action();
     else if (row.type === 'slider') { row.set(row.get() >= 1 ? 0 : Math.min(1, row.get() + 0.1)); }
   },
-  onScroll(dy) { if (!this.pad) { this.scrollY -= dy; this._clampScroll(); } },
+  onScroll(dy) { this.scrollY -= dy; this._clampScroll(); },
 
   onTap(x, y) {
-    if (this.pad) {
-      for (const r of this.pad.rects || []) {
-        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { this._padKey(r.key); return; }
-      }
-      // tap outside the panel cancels
-      this.pad = null; Snd.back();
-      return;
-    }
     if (y < 40 && x < 110) { this.onBack(); return; }
-    // version tap-to-reveal
-    const v = this.verRect;
-    if (v && x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h && !Save.data.dev.unlocked) {
-      this.verTaps++; this.verT = 2.5;
-      if (this.verTaps >= 7) { this.verTaps = 0; this.pad = { digits: '', shake: 0, rects: [] }; Snd.select(); }
-      else if (this.verTaps >= 4) this._say((7 - this.verTaps) + ' MORE...');
-      return;
-    }
     const lay = this._layout(App.W, App.H);
     const pw = Math.min(App.W - 28, 420), px = (App.W - pw) / 2;
     for (let i = 0; i < lay.length; i++) {
@@ -687,10 +612,10 @@ const ScreenSettings = {
       }
     }
   },
-  onBack() { if (this.pad) { this.pad = null; Snd.back(); return; } Snd.back(); App.setScreen('menu'); },
+  onBack() { Snd.back(); App.setScreen('menu'); },
 };
 
-// ══ DEV TOOLS (unlocked via code in settings) ═════════════════
+// ══ DEV TOOLS (reachable from the DEVELOPER MODE section) ═════
 const ScreenDev = {
   t: 0,
   enter() { this.t = 0; this._build(); },
@@ -699,14 +624,15 @@ const ScreenDev = {
     return m <= 220 ? 'FAST' : m >= 480 ? 'SLOW' : 'NORMAL';
   },
   _build() {
-    const grantAllItems = () => { for (const k in ITEMS) Save.grantItem(k); };
+    // dev mode already grants infinite coins + all levels; these are the
+    // extra testing shortcuts (relics, shop, walk speed)
+    const grantAllItems = () => { for (const k in ITEMS) { Save.grantItem(k); Save.setEquipped(k, true); } };
     const items = [
-      { label: '+10,000 COINS', action: () => { Save.addCoins(10000); Snd.coin(); this._say('COINS ADDED'); } },
-      { label: 'UNLOCK ALL LEVELS', action: () => { for (const lv of allStoryLevels()) if (!Save.isLevelDone(lv.id)) Save.data.story.levels[lv.id] = { done: true, bestMoves: 0 }; Save.write(); Snd.select(); this._say('ALL LEVELS UNLOCKED'); } },
-      { label: 'GRANT ALL RELICS', action: () => { grantAllItems(); Snd.itemGet(); this._say('RELICS GRANTED'); } },
+      { label: 'GRANT + EQUIP ALL RELICS', action: () => { grantAllItems(); Snd.itemGet(); this._say('RELICS GRANTED'); } },
+      { label: 'CLEAR RELICS', action: () => { Save.data.story.items = {}; Save.data.story.equipped = {}; Save.write(); Snd.back(); this._say('RELICS CLEARED'); } },
       { label: 'UNLOCK SHOP ITEMS', action: () => { for (const id in SKINS) if (!Save.owns(id)) Save.data.shop.owned.push(id); for (const id in THEMES) if (!Save.owns(id)) Save.data.shop.owned.push(id); Save.addHints(20); Save.write(); Snd.buy(); this._say('SHOP UNLOCKED'); } },
       { label: 'WALK SPEED: ' + this._speedName(), action: () => { App.moveMs = App.moveMs <= 220 ? 350 : App.moveMs >= 480 ? 200 : 500; Snd.blip(); this._build(); } },
-      { label: 'LOCK DEV MODE', danger: true, action: () => { Save.data.dev.unlocked = false; Save.write(); Snd.back(); App.setScreen('settings'); } },
+      { label: 'TURN OFF DEV MODE', danger: true, action: () => { Save.setDevMode(false); Art.setSkin(Save.data.shop.skin); Art.setTheme(Save.data.shop.theme); Snd.back(); App.setScreen('settings'); } },
       { label: 'BACK', action: () => { Snd.back(); App.setScreen('settings'); } },
     ];
     this.list = new MenuList(items);

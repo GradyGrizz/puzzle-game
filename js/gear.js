@@ -151,7 +151,7 @@ const GearUI = {
     // consumables / counts
     cells.push({ item: 'map', owned: true, count: Save.data.shop.hints,
       name: 'HINT SCROLLS', desc: 'REVEALS THE NEXT FEW MOVES.' });
-    cells.push({ item: 'coin', owned: true, count: Save.data.coins,
+    cells.push({ item: 'coin', owned: true, count: Save.devOn() ? '∞' : Save.data.coins,
       name: 'COINS', desc: 'SPEND THESE IN THE SHOP.' });
     if (g.gameMode === 'story' && g.state && g.state.keys > 0) {
       cells.push({ item: 'key', owned: true, count: g.state.keys,
