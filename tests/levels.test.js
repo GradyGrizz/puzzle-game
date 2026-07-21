@@ -86,6 +86,21 @@ function expect(name, cond) {
   expect('walk through cut bush', r3.ok && r3.state.player.c === 2);
 }
 
+// fire: shield gating + block snuff
+{
+  const st = parseLevel({ map: ['#####', '#@f.#', '#####'] });
+  const r1 = move(st, 1, 0, {});
+  expect('fire blocks without shield', !r1.ok);
+  const r2 = move(st, 1, 0, { shield: true });
+  expect('shield walks through fire (fire persists)', r2.ok && r2.state.player.c === 2 && r2.state.tiles[1][2] === 'f');
+}
+{
+  const st = parseLevel({ map: ['######', '#@bf.#', '######'] });
+  const r1 = move(st, 1, 0, {});
+  expect('block snuffs fire and stays', r1.ok && r1.state.tiles[1][3] === '.' && r1.state.blocks[0].c === 3
+    && r1.events.some(e => e.type === 'snuff'));
+}
+
 // heavy block needs glove
 {
   const st = parseLevel({ map: ['######', '#@h..#', '######'] });

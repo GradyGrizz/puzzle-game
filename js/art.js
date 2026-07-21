@@ -206,6 +206,32 @@ doorLocked(ctx, x, y, t) {
   ctx.fillStyle = '#4a3010'; ctx.fillRect(lx - 1, ly + 5, 3, 2);
 },
 
+fire(ctx, x, y, t, time) {
+  this.floor(ctx, x, y, t);
+  // charred base
+  ctx.fillStyle = '#0c0806';
+  const p = Math.floor(t * .18);
+  ctx.fillRect(x + p, y + t - p - 4, t - p * 2, 5);
+  // three flame tongues, flickering
+  const cx = x + Math.floor(t / 2);
+  const base = y + t - p - 2;
+  const tt = (time || 0) * 9;
+  for (let i = -1; i <= 1; i++) {
+    const fx = cx + i * Math.floor(t * 0.2);
+    const hh = Math.floor(t * (0.34 + 0.1 * Math.sin(tt + i * 2.1)) * (i === 0 ? 1.35 : 1));
+    const wsz = Math.max(3, Math.floor(t * 0.14));
+    ctx.fillStyle = PAL.swBtn;
+    ctx.fillRect(fx - wsz, base - hh, wsz * 2, hh);
+    ctx.fillStyle = PAL.swABtn;
+    ctx.fillRect(fx - wsz + 1, base - Math.floor(hh * 0.7), wsz * 2 - 2, Math.floor(hh * 0.7));
+    ctx.fillStyle = '#f0b428';
+    ctx.fillRect(fx - 1, base - Math.floor(hh * 0.42), Math.max(2, wsz - 1), Math.floor(hh * 0.42));
+  }
+  // ember glow on surrounding floor
+  ctx.fillStyle = `rgba(220,90,30,${0.10 + 0.05 * Math.sin(tt * 1.7)})`;
+  ctx.fillRect(x + 1, y + 1, t - 2, t - 2);
+},
+
 bush(ctx, x, y, t) {
   this.floor(ctx, x, y, t);
   const p = Math.floor(t * .12), s = t - p * 2;

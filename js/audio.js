@@ -86,6 +86,7 @@ const Snd = {
   keyGet()    { [660, 880, 1100].forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.16, this.now(i * 0.07))); },
   unlock()    { this.noise(0.05, 0.10, 0, 800); this.tone(392, 0.08, 'square', 0.13, this.now(0.06)); this.tone(523, 0.14, 'square', 0.13, this.now(0.13)); },
   cut()       { this.noise(0.10, 0.14, 0, 1600); this.tone(240, 0.08, 'sawtooth', 0.07); },
+  snuff()     { this.noise(0.22, 0.12, 0, 900); this.tone(180, 0.18, 'sine', 0.10, 0, 60); },
   crack()     { this.noise(0.14, 0.16, 0, 500); this.tone(150, 0.1, 'square', 0.08, 0, 60); },
   fall()      { this.tone(300, 0.35, 'square', 0.13, 0, 55); },
   chestOpen() { this.tone(196, 0.1, 'square', 0.12); this.tone(262, 0.1, 'square', 0.12, this.now(0.09)); this.tone(330, 0.18, 'square', 0.13, this.now(0.18)); },

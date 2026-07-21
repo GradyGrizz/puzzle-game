@@ -197,46 +197,88 @@ const ScreenMenu = {
   onBack() { App.setScreen('title'); Snd.back(); },
 };
 
-// ══ STORY SELECT ══════════════════════════════════════════════
+// ══ STORY SELECT (chapter pager) ══════════════════════════════
 const ScreenStory = {
-  t: 0, sel: 0, cells: [],
-  enter() {
+  t: 0, sel: 0, chIdx: 0, cells: [], arrows: [],
+  enter(params) {
     this.t = 0;
     Snd.playMusic('title');
-    this.levels = allStoryLevels();
-    // default selection: first not-done level
-    this.sel = this.levels.findIndex(l => !Save.isLevelDone(l.id));
-    if (this.sel < 0) this.sel = this.levels.length - 1;
+    // open on the chapter containing the first unfinished level
+    const all = allStoryLevels();
+    const firstOpen = all.find(l => !Save.isLevelDone(l.id));
+    this.chIdx = 0;
+    if (firstOpen) {
+      this.chIdx = STORY.chapters.findIndex(ch => ch.levels.some(l => l.id === firstOpen.id));
+    } else {
+      this.chIdx = STORY.chapters.length - 1;
+    }
+    if (params && params.chapter != null) this.chIdx = params.chapter;
+    this._selectDefault();
+  },
+  _levels() { return STORY.chapters[this.chIdx].levels; },
+  _chapterUnlocked(i) {
+    if (i === 0) return true;
+    return isLevelUnlocked(STORY.chapters[i].levels[0].id, Save);
+  },
+  _selectDefault() {
+    const lvls = this._levels();
+    this.sel = lvls.findIndex(l => !Save.isLevelDone(l.id) && isLevelUnlocked(l.id, Save));
+    if (this.sel < 0) this.sel = 0;
+  },
+  _switchChapter(dir) {
+    const ni = this.chIdx + dir;
+    if (ni < 0 || ni >= STORY.chapters.length) return;
+    this.chIdx = ni;
+    this._selectDefault();
+    Snd.blip();
   },
   update(dt) { this.t += dt; },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 220));
-    const ch = STORY.chapters[0];
-    drawText(ctx, ch.name, W / 2, 34, s + 1, PAL.goldHi, 'center', '#000');
-    drawText(ctx, ch.tagline, W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
-    coinsBadge(ctx, W - 16, 12, Save.data.coins, Math.max(1, s - 1));
-    // level grid
+    const ch = STORY.chapters[this.chIdx];
+    const unlocked = this._chapterUnlocked(this.chIdx);
+    const prog = chapterProgress(ch, Save);
+    const allDone = allStoryLevels().every(l => Save.isLevelDone(l.id));
+
+    // chapter header with pager arrows
+    drawText(ctx, ch.name, W / 2, 34, s + 1, unlocked ? PAL.goldHi : PAL.uiDim, 'center', '#000');
+    drawText(ctx, allDone ? 'THE KEEP SHINES AGAIN.' : ch.tagline, W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
+    drawText(ctx, (this.chIdx + 1) + '/' + STORY.chapters.length + '  ·  ' + prog.done + '/' + prog.total + ' CLEAR',
+      W / 2, 34 + 8 * (s + 1) + 20, 1, PAL.uiDim, 'center');
+    this.arrows = [];
+    if (this.chIdx > 0) {
+      this.arrows.push({ x: 18, y: 26, w: 40, h: 40, dir: -1 });
+      drawText(ctx, '◀', 30, 34, s + 1, PAL.gold, 'left');
+    }
+    if (this.chIdx < STORY.chapters.length - 1) {
+      this.arrows.push({ x: W - 58, y: 26, w: 40, h: 40, dir: 1 });
+      drawText(ctx, '▶', W - 30, 34, s + 1, this._chapterUnlocked(this.chIdx + 1) ? PAL.gold : PAL.uiDark, 'right');
+    }
+    coinsBadge(ctx, W - 16, 4, Save.data.coins, 1);
+    drawText(ctx, 'BACK', 16, 8, 1, PAL.uiDim, 'left');
+
+    // level grid for this chapter
+    const lvls = this._levels();
     const perRow = 4;
     const cell = Math.min(74, Math.floor((W - 60) / perRow));
     const gw = perRow * (cell + 10) - 10;
-    const gx = (W - gw) / 2, gy = Math.max(100, H * 0.18);
+    const gx = (W - gw) / 2, gy = Math.max(112, H * 0.17);
     this.cells = [];
-    for (let i = 0; i < this.levels.length; i++) {
-      const lv = this.levels[i];
+    for (let i = 0; i < lvls.length; i++) {
+      const lv = lvls[i];
       const r = Math.floor(i / perRow), c = i % perRow;
       const x = gx + c * (cell + 10), y = gy + r * (cell + 10);
       this.cells.push({ x, y, w: cell, h: cell });
       const done = Save.isLevelDone(lv.id);
-      const unlocked = isLevelUnlocked(lv.id, Save);
+      const lvUnlocked = isLevelUnlocked(lv.id, Save);
       const seld = i === this.sel;
       ctx.fillStyle = seld ? 'rgba(210,160,40,0.15)' : 'rgba(255,255,255,0.05)';
       ctx.fillRect(x, y, cell, cell);
       ctx.fillStyle = seld ? PAL.gold : (done ? 'rgba(210,160,40,0.4)' : 'rgba(255,255,255,0.12)');
       ctx.fillRect(x, y, cell, 2); ctx.fillRect(x, y + cell - 2, cell, 2);
       ctx.fillRect(x, y, 2, cell); ctx.fillRect(x + cell - 2, y, 2, cell);
-      if (!unlocked) {
-        // lock glyph
+      if (!lvUnlocked) {
         ctx.fillStyle = PAL.uiDark;
         const lx = x + cell / 2 - 8, ly2 = y + cell / 2 - 8;
         ctx.fillRect(lx + 2, ly2, 12, 6);
@@ -245,15 +287,19 @@ const ScreenStory = {
       } else {
         drawText(ctx, lv.id, x + cell / 2, y + cell / 2 - 8, s, done ? PAL.goldHi : PAL.ui, 'center', '#000');
         if (done) drawText(ctx, '★', x + cell / 2, y + cell - 16, 1, PAL.gold, 'center');
-        if (lv.chest) Art.coinIcon(ctx, x + 5, y + 5, 0); // no-op marker space
+        if (lv.chest) {
+          // small chest pip marks relic levels
+          ctx.fillStyle = '#6e4a22'; ctx.fillRect(x + 6, y + 6, 10, 7);
+          ctx.fillStyle = PAL.gold; ctx.fillRect(x + 6, y + 8, 10, 2);
+        }
       }
     }
-    // selected level name + relics
-    const selLv = this.levels[this.sel];
+    const selLv = lvls[this.sel];
     if (selLv) {
-      const rows = Math.ceil(this.levels.length / perRow);
+      const rows = Math.ceil(lvls.length / perRow);
       const infoY = gy + rows * (cell + 10) + 12;
-      drawText(ctx, selLv.name, W / 2, infoY, s, PAL.ui, 'center', '#000');
+      const showName = isLevelUnlocked(selLv.id, Save);
+      drawText(ctx, showName ? selLv.name : '???', W / 2, infoY, s, PAL.ui, 'center', '#000');
     }
     // relics owned
     const items = Object.keys(Save.data.story.items);
@@ -264,23 +310,31 @@ const ScreenStory = {
       ix += 52;
       for (const it of items) { Art.item(ctx, it, ix, iy, 24); ix += 32; }
     }
-    drawText(ctx, '◀ BACK', 16, 12, s, PAL.uiDim, 'left');
   },
   _start() {
-    const lv = this.levels[this.sel];
-    if (!isLevelUnlocked(lv.id, Save)) { Snd.error(); return; }
+    const lv = this._levels()[this.sel];
+    if (!lv || !isLevelUnlocked(lv.id, Save)) { Snd.error(); return; }
     Snd.select();
     App.setScreen('game', { levelId: lv.id });
   },
   onDirPress(dc, dr) {
-    const perRow = 4, n = this.levels.length;
-    let s2 = this.sel + dc + dr * perRow;
+    const perRow = 4, n = this._levels().length;
+    if (dc) {
+      const col = this.sel % perRow;
+      // walking off the grid edge pages between chapters
+      if (dc < 0 && col === 0) { this._switchChapter(-1); return; }
+      if (dc > 0 && (col === perRow - 1 || this.sel === n - 1)) { this._switchChapter(1); return; }
+    }
+    const s2 = this.sel + dc + dr * perRow;
     if (s2 >= 0 && s2 < n && s2 !== this.sel) { this.sel = s2; Snd.blip(); }
   },
   onDirRelease() {},
   onConfirm() { this._start(); },
   onTap(x, y) {
-    if (y < 40 && x < 120) { this.onBack(); return; }
+    if (y < 40 && x < 90) { this.onBack(); return; }
+    for (const a of this.arrows) {
+      if (x >= a.x && x < a.x + a.w && y >= a.y - 14 && y < a.y + a.h) { this._switchChapter(a.dir); return; }
+    }
     for (let i = 0; i < this.cells.length; i++) {
       const r = this.cells[i];
       if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {

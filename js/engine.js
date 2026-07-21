@@ -3,7 +3,7 @@
 
 const TILE = {
   WALL: '#', FLOOR: '.', EXIT: 'x', SWITCH: 's', CRACK: 'c',
-  PIT: 'p', DOOR: 'd', BUSH: 'u',
+  PIT: 'p', DOOR: 'd', BUSH: 'u', FIRE: 'f',
 };
 
 // Map legend:
@@ -23,6 +23,7 @@ function parseLevel(def) {
     coinsGot: 0,
     moves: 0,
     chest: def.chest ? { r: -1, c: -1, item: def.chest.item, opened: false } : null,
+    dark: !!def.dark,
     onCrack: false,      // player currently standing on a crack
     exitOpen: false,
     won: false,
@@ -39,6 +40,7 @@ function parseLevel(def) {
       else if (ch === 'p') t = TILE.PIT;
       else if (ch === 'd') t = TILE.DOOR;
       else if (ch === 'u') t = TILE.BUSH;
+      else if (ch === 'f') t = TILE.FIRE;
       else if (ch === 'b') { st.blocks.push({ r, c, heavy: false }); }
       else if (ch === 'B') { t = TILE.SWITCH; st.blocks.push({ r, c, heavy: false }); }
       else if (ch === 'h') { st.blocks.push({ r, c, heavy: true }); }
@@ -123,6 +125,12 @@ function move(prev, dc, dr, inventory) {
     }
   }
 
+  if (t === TILE.FIRE && !inv.shield) {
+    // only a shield-bearer can step into flame (fire is not consumed)
+    ev.push({ type: 'needItem', item: 'shield' });
+    return blocked(prev, st, ev, true);
+  }
+
   if (t === TILE.BUSH) {
     if (inv.sword) {
       st.tiles[nr][nc] = TILE.FLOOR;
@@ -161,6 +169,10 @@ function move(prev, dc, dr, inventory) {
       st.blocks = st.blocks.filter(b => b !== bl);
       st.tiles[br][bc] = TILE.FLOOR;
       ev.push({ type: 'blockFall', r: br, c: bc });
+    } else if (bt === TILE.FIRE) {
+      // block smothers the flame and stays put
+      st.tiles[br][bc] = TILE.FLOOR;
+      ev.push({ type: 'snuff', r: br, c: bc });
     } else if (bt === TILE.SWITCH) {
       ev.push({ type: 'switchOn', r: br, c: bc });
     }
@@ -210,7 +222,7 @@ function stateKey(st) {
   const mut = [];
   for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
     const t = st.tiles[r][c];
-    if (t === TILE.PIT || t === TILE.DOOR || t === TILE.BUSH || t === TILE.CRACK) mut.push(r + ',' + c + t);
+    if (t === TILE.PIT || t === TILE.DOOR || t === TILE.BUSH || t === TILE.CRACK || t === TILE.FIRE) mut.push(r + ',' + c + t);
   }
   const items = Object.keys(st.items).sort().join(';');
   const chest = st.chest ? (st.chest.opened ? 'O' : 'C') : '-';

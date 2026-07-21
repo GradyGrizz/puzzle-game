@@ -79,7 +79,10 @@ const ScreenGame = {
     const res = solveFrom(this.state, this.inventory(), 300000);
     if (!res.solvable) {
       Snd.error();
-      this.showToast('NO WAY FORWARD. TRY UNDO OR RESET.');
+      // a capped-out search means "too deep to see", not "impossible"
+      this.showToast(res.reason === 'node-cap'
+        ? 'THE SPIRITS CANNOT SEE THAT FAR AHEAD.'
+        : 'NO WAY FORWARD. TRY UNDO OR RESET.');
       return;
     }
     Save.useHint();
@@ -126,6 +129,7 @@ const ScreenGame = {
           if (need.item === 'key') this.showToast('LOCKED. FIND A KEY.');
           else if (need.item === 'sword') this.showToast('TOO THICK. YOU NEED A BLADE.');
           else if (need.item === 'glove') this.showToast('FAR TOO HEAVY TO PUSH.');
+          else if (need.item === 'shield') this.showToast('THE FLAMES DRIVE YOU BACK.');
         }
       }
       return;
@@ -176,6 +180,7 @@ const ScreenGame = {
       this.filled[ev.r + ',' + ev.c] = true;
     }
     if (has('switchOn')) Snd.switchOn();
+    if (has('snuff')) Snd.snuff();
     if (has('coin')) Snd.coin();
     if (has('key')) Snd.keyGet();
     if (has('exitOpen')) {
@@ -481,6 +486,7 @@ const ScreenGame = {
       else if (t === TILE.PIT) Art.pit(ctx, x, y, T);
       else if (t === TILE.DOOR) Art.doorLocked(ctx, x, y, T);
       else if (t === TILE.BUSH) Art.bush(ctx, x, y, T);
+      else if (t === TILE.FIRE) Art.fire(ctx, x, y, T, this.t);
     }
 
     for (const k in st.items) {
@@ -536,6 +542,24 @@ const ScreenGame = {
     }
     const animSt = this.anim ? this.anim.newState : st;
     Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
+
+    // darkness (ch5): chunky per-tile falloff around the lantern
+    if (st.dark) {
+      const radius = 2.4;
+      for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
+        const d = Math.max(Math.abs(r - hr), Math.abs(c - hc));
+        let a = Math.min(0.94, Math.max(0, (d - radius) * 0.55));
+        if (a <= 0) continue;
+        const tl = st.tiles[r][c];
+        if (tl === TILE.FIRE) a *= 0.25;      // flames pierce the dark
+        else if (tl === TILE.EXIT && st.exitOpen) a *= 0.45;
+        ctx.fillStyle = `rgba(1,2,4,${a})`;
+        ctx.fillRect(bx + c * T, by + r * T, T, T);
+      }
+      // soft lantern tint
+      ctx.fillStyle = 'rgba(240,200,110,0.045)';
+      ctx.fillRect(bx + (hc - 1.5) * T, by + (hr - 1.5) * T, T * 4, T * 4);
+    }
 
     // hint arrows
     if (this.hintPath) {
