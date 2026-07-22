@@ -146,12 +146,23 @@ const Save = {
   // ── dungeon progress ──
   isDungeonDone(id) { const r = this.data.story.dungeons[id]; return !!(r && r.done); },
   completeDungeon(id, coinsEarned) {
-    const rec = this.data.story.dungeons[id];
-    const first = !rec || !rec.done;
-    this.data.story.dungeons[id] = { done: true };
+    const rec = this.data.story.dungeons[id] || (this.data.story.dungeons[id] = {});
+    const first = !rec.done;
+    rec.done = true;
     if (first && !this.devOn()) this.data.coins += coinsEarned;
     this.write();
     return first;
+  },
+  // per-dungeon map (revealed by that dungeon's map chest); dev sees all
+  hasDungeonMap(id) {
+    if (this.devOn()) return true;
+    const r = this.data.story.dungeons[id];
+    return !!(r && r.map);
+  },
+  grantDungeonMap(id) {
+    const rec = this.data.story.dungeons[id] || (this.data.story.dungeons[id] = {});
+    rec.map = true;
+    this.write();
   },
 
   hasItem(item) { return !!this.data.story.items[item]; },

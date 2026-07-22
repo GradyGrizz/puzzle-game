@@ -21,6 +21,7 @@ const ScreenGame = {
       // multi-room dungeon
       this.dungeon = getDungeon(params.dungeonId);
       this.firstTime = !Save.isDungeonDone(this.dungeon.id);
+      this.mapFound = Save.hasDungeonMap(this.dungeon.id);
       this.budget = 0;
       this.rooms = {};             // persistent per-room engine states
       this.dkeys = 0;              // shared key pool
@@ -503,7 +504,9 @@ const ScreenGame = {
     const ca = this.chestAnim;
     if (!ca || ca.phase < 2) return;
     const item = ca.item;
-    Save.grantItem(item);
+    // the dungeon map is per-dungeon knowledge, not a global relic
+    if (item === 'map') { Save.grantDungeonMap(this.dungeon.id); this.mapFound = true; }
+    else Save.grantItem(item);
     this.chestAnim = null;
     this.mode = 'play';
     Snd.select();
@@ -515,7 +518,7 @@ const ScreenGame = {
     }
     // equippable relic? send the player straight to the gear screen so
     // the first time you EQUIP it feels deliberate (OoT get-item flow)
-    if (GearUI.slots.some(s => s.item === item) && !Save.isEquipped(item)) {
+    if (item !== 'map' && GearUI.slots.some(s => s.item === item) && !Save.isEquipped(item)) {
       this._openGear('equipment', item);
     }
   },
@@ -844,6 +847,7 @@ const ScreenGame = {
     }
 
     this.drawHud(ctx, W, H, hudH);
+    if (this.gameMode === 'story' && this.mode !== 'gear') this.drawMinimap(ctx, W, H, hudH);
 
     if (this.toast) {
       let s = 2;
@@ -893,6 +897,55 @@ const ScreenGame = {
     drawText(ctx, 'PAUSED', W / 2, py + 20, s + 1, PAL.goldHi, 'center', '#000');
     ctx.restore();
     this.pauseList.draw(ctx, W / 2, py + 64, pw - 48, 42, s, this.uiT);
+  },
+
+  // OoT-style minimap (top-left): visited rooms glow gold, the current room
+  // is brightest with a marker; unvisited rooms show greyed once the dungeon
+  // MAP chest has been opened (before that only your trail is drawn).
+  drawMinimap(ctx, W, H, hudH) {
+    const rooms = this.dungeon.rooms;
+    let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+    for (const id in rooms) {
+      const r = rooms[id];
+      if (r.gx < minx) minx = r.gx; if (r.gx > maxx) maxx = r.gx;
+      if (r.gy < miny) miny = r.gy; if (r.gy > maxy) maxy = r.gy;
+    }
+    const cols = maxx - minx + 1, rows = maxy - miny + 1;
+    const cell = 9, gap = 3, pad = 6, labelH = 11;
+    const gw = cols * (cell + gap) - gap, gh = rows * (cell + gap) - gap;
+    const pw = gw + pad * 2, ph = gh + pad * 2 + labelH;
+    const px = 8, py = hudH + 6;
+    ctx.fillStyle = 'rgba(6,8,14,0.76)'; ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(px, py, pw, 1); ctx.fillRect(px, py + ph - 1, pw, 1);
+    ctx.fillRect(px, py, 1, ph); ctx.fillRect(px + pw - 1, py, 1, ph);
+    ctx.fillStyle = PAL.gold; ctx.fillRect(px, py, pw, 1);
+    drawText(ctx, this.mapFound ? 'MAP' : 'TRAIL', px + pad, py + 3, 1, PAL.uiDim, 'left');
+    const hasMap = this.mapFound;
+    const shown = id => this.visited[id] || hasMap;
+    const gx0 = px + pad, gy0 = py + pad + labelH;
+    const cellXY = r => [gx0 + (r.gx - minx) * (cell + gap), gy0 + (r.gy - miny) * (cell + gap)];
+    // door connectors (faint) between shown adjacent rooms
+    for (const id in rooms) {
+      if (!shown(id)) continue;
+      const r = rooms[id]; const [cx, cy] = cellXY(r);
+      for (const [side, sx, sy] of [['e', 1, 0], ['s', 0, 1]]) {
+        if (!r.doors[side]) continue;
+        const nid = Dungeon.neighborId(this.dungeon, r, side);
+        if (!nid || !shown(nid)) continue;
+        ctx.fillStyle = 'rgba(180,160,90,0.35)';
+        if (sx) ctx.fillRect(cx + cell, cy + (cell >> 1) - 1, gap, 2);
+        else ctx.fillRect(cx + (cell >> 1) - 1, cy + cell, 2, gap);
+      }
+    }
+    for (const id in rooms) {
+      if (!shown(id)) continue;
+      const r = rooms[id]; const [cx, cy] = cellXY(r);
+      const cur = id === this.roomId, vis = this.visited[id];
+      ctx.fillStyle = cur ? PAL.goldHi : vis ? PAL.gold : 'rgba(96,106,126,0.5)';
+      ctx.fillRect(cx, cy, cell, cell);
+      if (cur) { ctx.fillStyle = '#2a1c02'; ctx.fillRect(cx + (cell >> 1) - 1, cy + (cell >> 1) - 1, 3, 3); }
+    }
   },
 
   drawHud(ctx, W, H, hudH) {

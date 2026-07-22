@@ -20,6 +20,7 @@ const ITEMS = {
   glove:    { name: 'TITAN GLOVE',     desc: 'PUSHES HEAVY IRON BLOCKS.' },
   lantern:  { name: 'PALE LANTERN',    desc: 'LIGHTS THE DARKEST VAULTS.' },
   boots:    { name: 'STRIDER BOOTS',   desc: 'STRIDE ACROSS OPEN CHASMS.' },
+  map:      { name: 'DUNGEON MAP',      desc: 'THE HALLS UNFOLD IN YOUR MIND.' },
   sunstone: { name: 'SUNSTONE',        desc: 'THE HEART OF THE KEEP, ABLAZE ONCE MORE.' },
 };
 
