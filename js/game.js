@@ -190,7 +190,7 @@ const ScreenGame = {
     this.mode = 'trans';
     this.heldDir = null; this.queued = null; this.anim = null;
     this.roomTrans = { side, nid, phase: 'out', t: 0 };
-    Snd.step();
+    Snd.door();
   },
   // door cells + their live open/type for this room's render pass
   _doorCells() {
