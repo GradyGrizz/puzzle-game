@@ -63,7 +63,7 @@ const Snd = {
     o.start(t); o.stop(t + dur + 0.05);
   },
 
-  noise(dur, vol, when, hipass) {
+  noise(dur, vol, when, hipass, dest) {
     if (!this.ctx) return;
     const t = (when || this.ctx.currentTime);
     const n = Math.floor(this.ctx.sampleRate * dur);
@@ -81,8 +81,60 @@ const Snd = {
       f.type = 'highpass'; f.frequency.value = hipass;
       src.connect(f); node = f;
     }
-    node.connect(g); g.connect(this.sfxGain);
+    node.connect(g); g.connect(dest || this.sfxGain);
     src.start(t);
+  },
+
+  // ── music instruments (GBA-era layers; melodies stay in SONGS) ──
+  // lead: two detuned oscillators through a lowpass — fatter than one chip osc
+  _mel(freq, dur, t, vol, wave) {
+    if (!this.ctx) return;
+    const g = this.ctx.createGain();
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 2600;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    g.connect(f); f.connect(this.musGain);
+    for (const det of [-5, 5]) {
+      const o = this.ctx.createOscillator();
+      o.type = wave; o.frequency.value = freq; o.detune.value = det;
+      o.connect(g); o.start(t); o.stop(t + dur + 0.05);
+    }
+  },
+  // sustained chord pad under the bar: soft filtered saws, slow attack
+  _pad(chordMidis, dur, t, vol) {
+    if (!this.ctx) return;
+    const g = this.ctx.createGain();
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 900;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.25);
+    g.gain.setValueAtTime(vol, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0.0008, t + dur);
+    g.connect(f); f.connect(this.musGain);
+    for (let i = 0; i < chordMidis.length; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = midiF(chordMidis[i]);
+      o.detune.value = i * 4 - 4;
+      o.connect(g); o.start(t); o.stop(t + dur + 0.05);
+    }
+  },
+  _kick(t, vol) {
+    if (!this.ctx) return;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.09);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    o.connect(g); g.connect(this.musGain);
+    o.start(t); o.stop(t + 0.16);
+  },
+  _hat(t, vol)   { this.noise(0.03, vol, t, 6500, this.musGain); },
+  _snare(t, vol) {
+    this.noise(0.09, vol, t, 1800, this.musGain);
+    this.tone(190, 0.06, 'triangle', vol * 0.7, t, null, this.musGain);
   },
 
   // ── SFX vocabulary ──
@@ -145,11 +197,28 @@ const Snd = {
       const b = s.bars[bar];
       const mi = s.melody[step];
       const t = this._nextNoteTime;
+      // lead (same melodies, fatter detuned voice) + optional echo
       if (mi >= 0 && b.chord[mi] != null) {
-        this.tone(midiF(b.chord[mi]), spb * 0.9, s.wave || 'square', s.vol || 0.045, t, null, this.musGain);
+        const f = midiF(b.chord[mi]);
+        this._mel(f, spb * 0.9, t, s.vol || 0.045, s.wave || 'square');
+        if (s.echo) this._mel(f, spb * 0.8, t + spb * 2, (s.vol || 0.045) * 0.35, s.wave || 'square');
       }
+      // bass
       if (step === 0 || (s.bassHalf && step === stepsPerBar / 2)) {
         this.tone(midiF(b.bass), spb * (s.bassHalf ? stepsPerBar / 2 : stepsPerBar) * 0.95, 'triangle', s.bassVol || 0.09, t, null, this.musGain);
+      }
+      // chord pad held under the whole bar
+      if (step === 0 && s.pad) this._pad(b.chord, spb * stepsPerBar, t, s.padVol || 0.02);
+      // drum kit (8-step patterns)
+      if (s.drums === 'full') {
+        if (step === 0) this._kick(t, 0.14);
+        if (step === stepsPerBar / 2) this._snare(t, 0.045);
+        this._hat(t, step % 2 ? 0.018 : 0.032);
+      } else if (s.drums === 'lite') {
+        if (step === 0) this._kick(t, 0.10);
+        if (step === 2 || step === 6) this._hat(t, 0.02);
+      } else if (s.drums === 'heart') {
+        if (step === 0) this._kick(t, 0.07);
       }
       this._songStep++;
       this._nextNoteTime += spb;
@@ -163,6 +232,7 @@ function midiF(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 const SONGS = {
   title: {
     bpm: 104, wave: 'square', vol: 0.05, bassVol: 0.10, bassHalf: true,
+    pad: true, padVol: 0.022, drums: 'full',
     melody: [0, 1, 2, 1, 3, 1, 2, 1],
     bars: [
       { chord: [69, 72, 76, 81], bass: 45 }, // Am
@@ -173,6 +243,7 @@ const SONGS = {
   },
   dungeon: {
     bpm: 76, wave: 'triangle', vol: 0.055, bassVol: 0.08,
+    pad: true, padVol: 0.016, drums: 'lite', echo: true,
     melody: [0, -1, 1, -1, 2, -1, 1, -1],
     bars: [
       { chord: [57, 60, 64], bass: 33 }, // Am low
@@ -183,6 +254,7 @@ const SONGS = {
   },
   deep: {
     bpm: 54, wave: 'triangle', vol: 0.05, bassVol: 0.075,
+    pad: true, padVol: 0.014, drums: 'heart', echo: true,
     melody: [0, -1, -1, 1, -1, -1, 2, -1],
     bars: [
       { chord: [45, 48, 52], bass: 33 }, // Am, very low
@@ -193,6 +265,7 @@ const SONGS = {
   },
   shop: {
     bpm: 118, wave: 'square', vol: 0.045, bassVol: 0.10, bassHalf: true,
+    pad: true, padVol: 0.02, drums: 'full',
     melody: [0, 2, 1, 2, 3, 2, 1, 2],
     bars: [
       { chord: [72, 76, 79, 84], bass: 48 }, // C
