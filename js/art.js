@@ -70,6 +70,8 @@ _h(seed, i) { let z = (((seed >>> 0) + i * 374761393) >>> 0); z = ((z ^ (z >>> 1
 // textured flagstone floor: seams + a few scattered pebbles / hairline
 // cracks (seeded by tile so it doesn't shimmer). `seed` optional.
 floor(ctx, x, y, t, seed) {
+  const im = this.img['floor' + (Math.abs(Math.floor(x) * 131 + Math.floor(y) * 57) % 3)];
+  if (this._ready(im)) { ctx.drawImage(im, x, y, t, t); return; }
   ctx.fillStyle = PAL.fl; ctx.fillRect(x, y, t, t);
   // bevelled flagstone: light top-left seam, dark bottom-right
   ctx.fillStyle = PAL.flG; ctx.fillRect(x, y, t, 1); ctx.fillRect(x, y, 1, t);
@@ -98,6 +100,7 @@ floor(ctx, x, y, t, seed) {
 // shadowed bottom-right) for a 2.5D carved look, plus a bottom cast shadow
 // that lifts the wall off the floor.
 wall(ctx, x, y, t) {
+  if (this._ready(this.img.wall)) { ctx.drawImage(this.img.wall, x, y, t, t); return; }
   ctx.fillStyle = PAL.wSh; ctx.fillRect(x, y, t, t);        // mortar base
   const half = Math.floor(t / 2), g = 1;
   const seedRow = (yy) => ((x * 0) ^ (yy * 2654435761)) >>> 0; // seam continues across tiles
@@ -153,6 +156,11 @@ torch(ctx, x, y, t, time) {
 // hero (drawn on top) clearly stands ON it instead of merging into it.
 switchTile(ctx, x, y, t, on) {
   this.floor(ctx, x, y, t);
+  if (this._ready(this.img.switch)) {
+    this._blit(ctx, this.img.switch, x + t / 2, y + t / 2, t * 0.84, t * 0.84);
+    if (on) { ctx.fillStyle = 'rgba(255,200,80,0.30)'; ctx.fillRect(x, y, t, t); }
+    return;
+  }
   const s = Math.floor(t * .5), ox = x + Math.floor((t - s) / 2), oy = y + Math.floor((t - s) / 2);
   // dark recessed socket the plate sits inside
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -173,6 +181,11 @@ switchTile(ctx, x, y, t, on) {
 // left light edge + right/bottom shadow, and a cast shadow for depth
 block(ctx, x, y, t, glow) {
   this.floor(ctx, x, y, t, ((x * 3) ^ (y * 5)));
+  if (this._ready(this.img.block)) {
+    this._blit(ctx, this.img.block, x + t / 2, y + t / 2, t * 0.94, t * 0.94);
+    if (glow) { ctx.fillStyle = 'rgba(210,80,20,0.28)'; ctx.fillRect(x, y, t, t); }
+    return;
+  }
   const p = Math.floor(t * .08), bs = t - p * 2;
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x + p + 3, y + p + 4, bs, bs); // cast shadow
   ctx.fillStyle = PAL.blF; ctx.fillRect(x + p, y + p, bs, bs);                    // body
@@ -419,6 +432,7 @@ coin(ctx, x, y, t, bob) {
   const r = Math.floor(t * .18);
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.fillRect(cx - r, y + t - 4, r * 2, 2);
+  if (this._ready(this.img.coin)) { this._blit(ctx, this.img.coin, cx, cy, t * 0.46, t * 0.46); return; }
   ctx.fillStyle = PAL.goldLo;
   ctx.fillRect(cx - r, cy - r + 1, r * 2, r * 2 - 2);
   ctx.fillRect(cx - r + 1, cy - r, r * 2 - 2, r * 2);
@@ -455,6 +469,8 @@ keyIcon(ctx, x, y, s) {
 
 // ── inventory / chest items ──────────────────────────────────
 item(ctx, type, x, y, s) {
+  const relic = this.img['relic_' + type];
+  if (this._ready(relic)) { this._blit(ctx, relic, x + s / 2, y + s / 2, s, s); return; }
   const u = Math.max(1, Math.floor(s / 16));
   const cx = x + Math.floor(s / 2);
   if (type === 'sword') {
@@ -573,6 +589,7 @@ loadSprites(onReady) {
   this.sheet.src = 'hero2.png';
   this.sheet.onload = onReady;
   this._loadAux();
+  this.loadAssets();
 },
 
 // load push_up.png / push_left.png if they exist and auto-slice 4 tight
@@ -601,6 +618,31 @@ _sliceAux(dir, img) {
     }
     if (frames.length === 4) this._aux[dir] = { img, frames };
   } catch (e) { /* cross-origin/tainted (file://) — fall back to main sheet */ }
+},
+
+// ── image assets sliced from the uploaded sprite sheets (art/) ──
+// Each draw falls back to the procedural version until its PNG is loaded,
+// so the game never blocks on these.
+ASSETS: {
+  floor0: 'art/tile_floor0.png', floor1: 'art/tile_floor1.png', floor2: 'art/tile_floor2.png',
+  wall: 'art/tile_wall.png', coin: 'art/tile_coin.png', block: 'art/tile_block.png',
+  switch: 'art/tile_switch.png', door: 'art/tile_door.png',
+  relic_sword: 'art/relic_sword.png', relic_shield: 'art/relic_shield.png',
+  relic_glove: 'art/relic_glove.png', relic_lantern: 'art/relic_lantern.png',
+  relic_boots: 'art/relic_boots.png',
+  mi_sword: 'art/mi_sword.png', mi_depth: 'art/mi_depth.png', mi_clock: 'art/mi_clock.png',
+  mi_cart: 'art/mi_cart.png', mi_gear: 'art/mi_gear.png',
+},
+img: {},
+loadAssets() {
+  for (const k in this.ASSETS) { const im = new Image(); im.src = this.ASSETS[k]; this.img[k] = im; }
+},
+_ready(im) { return !!(im && im.complete && im.naturalWidth > 0); },
+// draw `im` centered in a maxW×maxH box at (cx,cy), preserving aspect, pixel-crisp
+_blit(ctx, im, cx, cy, maxW, maxH) {
+  const iw = im.naturalWidth, ih = im.naturalHeight, sc = Math.min(maxW / iw, maxH / ih);
+  const w = Math.max(1, Math.round(iw * sc)), h = Math.max(1, Math.round(ih * sc));
+  ctx.drawImage(im, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 },
 
 // ── skins: recolor the green tunic/cap to a tint, keep shading ──
@@ -703,6 +745,8 @@ panel(ctx, x, y, w, h) {
 
 // small pixel glyphs for menu cards
 uiIcon(ctx, name, x, y, size) {
+  const mi = this.img['mi_' + name];
+  if (this._ready(mi)) { this._blit(ctx, mi, x + size / 2, y + size / 2, size, size); return; }
   const u = Math.max(1, Math.floor(size / 12));
   if (name === 'play') {
     ctx.fillStyle = PAL.goldHi;
