@@ -11,7 +11,7 @@
 // key-fetch loops (find a key, backtrack to a locked door) and shutter
 // puzzles. You get the relic ~70% in, then BACKTRACK through old rooms to
 // clear the gate and reach the exit. Length/difficulty escalate D1 (~3 min,
-// 12 rooms, 1 key) -> D5 (~10 min, 16 rooms, 3 keys).
+// 12 rooms, 1 key) -> D5 (~10 min, 20 rooms, 3 keys).
 //
 // Room map legend (border is wall; doorways punched at edge centres):
 //   # wall  . floor  s switch  b block  h heavy  u bush  f fire  p pit
@@ -133,7 +133,7 @@ const DUNGEONS = [
     },
   },
 
-  // ══ D4 · THE LIGHTLESS DEEP · LANTERN · 15 rooms · 2 keys · dark-veiled exit ══
+  // ══ D4 · THE LIGHTLESS DEEP · LANTERN · 18 rooms · 2 keys · dark-veiled exit ══
   {
     id: 'd4', name: 'THE LIGHTLESS DEEP',
     tagline: 'THE SUN HAS NEVER ONCE TOUCHED THIS PLACE.',
@@ -149,18 +149,21 @@ const DUNGEONS = [
       rA: R(1, 3, _KEY, { s: 'open' }),
       r5: R(3, 4, _HALL, { w: 'open', e: 'open' }, { dark: true, intro: 'EAST IS PITCH BLACK. YOU CANNOT SEE A SEAL, LET ALONE SOLVE ONE. FIND A LIGHT.' }),
       r6: R(4, 4, _P2, { w: 'open', e: 'shutter' }, { dark: true }),
-      rX: R(5, 4, _BOSS, { w: 'open' }, { boss: true, dark: true }),
-      r7: R(2, 3, _HALL, { s: 'lock', n: 'open' }),
+      r6b: R(5, 4, _COIN, { w: 'open', e: 'open' }, { dark: true }),
+      rX: R(6, 4, _BOSS, { w: 'open' }, { boss: true, dark: true }),
+      r7: R(2, 3, _HALL, { s: 'lock', n: 'open', e: 'open' }),
+      rD: R(3, 3, _COIN, { w: 'open' }),
       r8: R(2, 2, _P4, { s: 'open', n: 'shutter' }),
       r9: R(2, 1, _HALL, { s: 'open', w: 'open', e: 'open', n: 'lock' }),
       r10: R(1, 1, _P2, { e: 'open', n: 'shutter' }),
       rB: R(1, 0, _KEY, { s: 'open' }),
-      rM: R(3, 1, _CHEST, { w: 'open' }, { chest: { item: 'map' } }),
+      rM: R(3, 1, _CHEST, { w: 'open', e: 'open' }, { chest: { item: 'map' } }),
+      rE: R(4, 1, _COIN, { w: 'open' }),
       r11: R(2, 0, _CHEST, { s: 'lock' }, { chest: { item: 'lantern' }, intro: 'THE PALE LANTERN. THE DARK NO LONGER OWNS THE DEEP.' }),
     },
   },
 
-  // ══ D5 · THE ABYSSAL DESCENT · BOOTS · 16 rooms · 3 keys · chasm-gated exit ══
+  // ══ D5 · THE ABYSSAL DESCENT · BOOTS · 20 rooms · 3 keys · chasm-gated exit ══
   {
     id: 'd5', name: 'THE ABYSSAL DESCENT',
     tagline: 'THE SUNSTONE WAITS WHERE THE FLOOR RUNS OUT.',
@@ -175,15 +178,19 @@ const DUNGEONS = [
       rA: R(0, 4, _KEY, { e: 'open' }),
       r5: R(3, 4, _PITV, { w: 'open', e: 'open' }, { intro: 'A CHASM WITHOUT A BRIDGE SWALLOWS THE EXIT HALL. ONLY STRIDER BOOTS CROSS IT.' }),
       r6: R(4, 4, _PITS, { w: 'open', e: 'open' }),
-      rX: R(5, 4, _BOSSC, { w: 'open' }, { boss: true, chest: { item: 'sunstone' } }),
-      r7: R(2, 3, _COIN, { s: 'lock', n: 'open' }),
+      r6b: R(5, 4, _PITS, { w: 'open', e: 'open' }),
+      rX: R(6, 4, _BOSSC, { w: 'open' }, { boss: true, chest: { item: 'sunstone' } }),
+      r7: R(2, 3, _COIN, { s: 'lock', n: 'open', e: 'open' }),
+      rD: R(3, 3, _HALL11, { w: 'open' }),
       r8: R(2, 2, _HALL, { s: 'open', w: 'open', e: 'open', n: 'lock' }),
       r9: R(1, 2, _P4, { e: 'open', w: 'shutter' }),
       rB: R(0, 2, _KEY, { e: 'open' }),
-      rM: R(3, 2, _CHEST, { w: 'open' }, { chest: { item: 'map' } }),
-      r11: R(2, 1, _HALL, { s: 'open', w: 'open', n: 'lock' }),
+      rM: R(3, 2, _CHEST, { w: 'open', e: 'open' }, { chest: { item: 'map' } }),
+      rE: R(4, 2, _COIN, { w: 'open' }),
+      r11: R(2, 1, _HALL, { s: 'open', w: 'open', e: 'open', n: 'lock' }),
       r12: R(1, 1, _P2, { e: 'open', n: 'shutter' }),
       rC: R(1, 0, _KEY, { s: 'open' }),
+      rF: R(3, 1, _COIN, { w: 'open' }),
       r13: R(2, 0, _CHEST, { s: 'lock' }, { chest: { item: 'boots' }, intro: 'THE STRIDER BOOTS. NOW — BACK TO THE CHASM.' }),
     },
   },
