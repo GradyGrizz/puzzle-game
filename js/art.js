@@ -564,11 +564,43 @@ PUSH: {
 
 sheet: null,
 _skin: 'skin_default', _skinCache: {},
+// optional standalone push sheets (4-frame horizontal strips) that override
+// the corresponding direction on the main sheet once present in the repo.
+_aux: {},
 
 loadSprites(onReady) {
   this.sheet = new Image();
   this.sheet.src = 'hero2.png';
   this.sheet.onload = onReady;
+  this._loadAux();
+},
+
+// load push_up.png / push_left.png if they exist and auto-slice 4 tight
+// frames; missing files just fall back to the main-sheet poses.
+_loadAux() {
+  const files = { up: 'push_up.png', left: 'push_left.png' };
+  for (const dir in files) {
+    const img = new Image();
+    img.onload = () => this._sliceAux(dir, img);
+    img.onerror = () => {};
+    img.src = files[dir];
+  }
+},
+_sliceAux(dir, img) {
+  try {
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
+    const d = c.getImageData(0, 0, W, H).data, A = (x, y) => d[(y * W + x) * 4 + 3];
+    const cw = W / 4, frames = [];
+    for (let i = 0; i < 4; i++) {
+      const x0 = Math.floor(i * cw), x1 = Math.floor((i + 1) * cw);
+      let minX = x1, maxX = x0, minY = H, maxY = 0, hit = false;
+      for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) if (A(x, y) > 40) { hit = true; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      if (hit) frames.push([minX, minY, maxX - minX + 1, maxY - minY + 1]);
+    }
+    if (frames.length === 4) this._aux[dir] = { img, frames };
+  } catch (e) { /* cross-origin/tainted (file://) — fall back to main sheet */ }
 },
 
 // ── skins: recolor the green tunic/cap to a tint, keep shading ──
@@ -621,15 +653,17 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   //    up-push uses the clean back-view WALK.up cycle instead.
   //  - the sheet has no true left-push row (its "left" row faces right), so we
   //    mirror the good PUSH.right frames for the left-push.
-  let box, flip = false;
-  if (pushing) {
+  let box, flip = false, src = this._activeSheet();
+  const auxDir = pushing && (dir === 'up' || dir === 'left') ? this._aux[dir] : null;
+  if (auxDir) {
+    box = auxDir.frames[frame % 4]; src = auxDir.img;   // dedicated push sheet
+  } else if (pushing) {
     if (dir === 'up') box = this.WALK.up[frame % 4];
     else if (dir === 'left') { box = this.PUSH.right[frame % 4]; flip = true; }
     else box = this.PUSH[dir][frame % 4];
   } else if (idle) box = this.IDLE[dir];
   else box = this.WALK[dir][frame % 4];
   const [sx, sy, sw, sh] = box;
-  const src = this._activeSheet();
   if (!src || (src.complete === false)) return;
   const dh = Math.round(tile * 1.05);
   const dw = Math.round(dh * sw / sh);
