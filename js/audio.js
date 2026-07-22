@@ -19,7 +19,11 @@ const Snd = {
     this.sfxGain.connect(this.master);
     this.musGain = this.ctx.createGain();
     this.musGain.gain.value = 0.55;
-    this.musGain.connect(this.master);
+    // duck node: song-switch crossfades ramp this, so user volume (musGain)
+    // and fade level stay independent
+    this.musDuck = this.ctx.createGain();
+    this.musGain.connect(this.musDuck);
+    this.musDuck.connect(this.master);
     this.applySettings();
   },
 
@@ -171,9 +175,33 @@ const Snd = {
   playMusic(name) {
     if (!this.ctx) { this._pendingSong = name; return; }
     if (this._song && this._song.name === name) return;
-    this.stopMusic();
+    const hadSong = !!this._song;
+    // stop scheduling new notes for the old song immediately
+    if (this._musicTimer) clearInterval(this._musicTimer);
+    this._musicTimer = null;
+    this._song = null;
+    clearTimeout(this._fadeTimer);
+    if (hadSong && this.musDuck) {
+      // fade the old song's tail out, then start the new one fading in
+      const t = this.ctx.currentTime, d = this.musDuck.gain;
+      d.cancelScheduledValues(t);
+      d.setValueAtTime(d.value, t);
+      d.linearRampToValueAtTime(0.0001, t + 0.4);
+      this._fadeTimer = setTimeout(() => this._startSong(name), 430);
+    } else {
+      this._startSong(name);
+    }
+  },
+
+  _startSong(name) {
     const song = SONGS[name];
-    if (!song) return;
+    if (!song || !this.ctx) return;
+    if (this.musDuck) {
+      const t = this.ctx.currentTime, d = this.musDuck.gain;
+      d.cancelScheduledValues(t);
+      d.setValueAtTime(0.0001, t);
+      d.linearRampToValueAtTime(1, t + 0.5);
+    }
     this._song = Object.assign({ name }, song);
     this._songStep = 0;
     this._nextNoteTime = this.ctx.currentTime + 0.1;
@@ -184,6 +212,7 @@ const Snd = {
     if (this._musicTimer) clearInterval(this._musicTimer);
     this._musicTimer = null;
     this._song = null;
+    clearTimeout(this._fadeTimer);
   },
 
   _schedule() {
