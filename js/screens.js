@@ -112,34 +112,82 @@ function coinsBadge(ctx, x, y, n, s) {
   drawText(ctx, txt, x - w + 10 * s, y + s, s, PAL.goldHi, 'left', '#000');
 }
 
+// classic drop-and-bounce easing for the logo landing
+function easeOutBounce(x) {
+  const n1 = 7.5625, d1 = 2.75;
+  if (x < 1 / d1) return n1 * x * x;
+  if (x < 2 / d1) { x -= 1.5 / d1; return n1 * x * x + 0.75; }
+  if (x < 2.5 / d1) { x -= 2.25 / d1; return n1 * x * x + 0.9375; }
+  x -= 2.625 / d1; return n1 * x * x + 0.984375;
+}
+
 // ══ TITLE ═════════════════════════════════════════════════════
+// Retro startup sequence (Pokémon-ish): the DELVE logo drops in from the
+// top, bounces to a stop with a little screen-shake + thud, a shine sweeps
+// across it, then the rest of the screen fades in.
 const ScreenTitle = {
-  t: 0, heroX: -80, frame: 0,
-  enter() { this.t = 0; Snd.playMusic('title'); },
+  FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
+  t: 0, heroX: -80, frame: 0, landed: false, shineT: -1, shake: 0,
+  enter() { this.t = 0; this.heroX = -80; this.landed = false; this.shineT = -1; this.shake = 0; Snd.playMusic('title'); },
   update(dt) {
     this.t += dt;
-    this.heroX += dt * 42;
-    const W = App.W;
-    if (this.heroX > W + 80) this.heroX = -80;
     this.frame = Math.floor(this.t * 7) % 4;
+    if (this.landed) { this.heroX += dt * 42; if (this.heroX > App.W + 80) this.heroX = -80; }
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
+    if (!this.landed && this.t >= this.FALL) {
+      this.landed = true; this.shineT = 0; this.shake = 0.22;
+      Snd.thud(); Platform.haptic('heavy');
+    }
+    if (this.shineT >= 0) this.shineT += dt;
   },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 200));
     const big = Math.max(4, Math.floor(W / 82));
     const ly = H * 0.24;
-    drawText(ctx, 'DELVE', W / 2, ly, big, PAL.goldHi, 'center', '#3a2808');
+    const logoW = textWidth('DELVE', big);
+    // falling logo with a bounce landing
+    const p = Math.min(1, this.t / this.FALL);
+    const startY = -7 * big - 30;
+    const logoY = Math.round(startY + (ly - startY) * easeOutBounce(p));
+
+    ctx.save();
+    if (this.shake > 0) { const k = this.shake / 0.22; ctx.translate(0, Math.round((Math.random() - 0.5) * 9 * k)); }
+    drawText(ctx, 'DELVE', W / 2, logoY, big, PAL.goldHi, 'center', '#3a2808');
+    // shine sweep across the letters once it lands
+    if (this.landed && this.shineT >= this.SHINE_DELAY) {
+      const sp = (this.shineT - this.SHINE_DELAY) / this.SHINE_DUR;
+      if (sp <= 1) {
+        const lx = W / 2 - logoW / 2, band = big * 7, slant = big * 4;
+        const cx = lx - band + (logoW + band * 2) * sp;
+        const top = logoY - 4, bot = logoY + 7 * big + 4;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cx, top); ctx.lineTo(cx + band, top);
+        ctx.lineTo(cx + band - slant, bot); ctx.lineTo(cx - slant, bot);
+        ctx.closePath(); ctx.clip();
+        ctx.globalAlpha = 0.92 * Math.sin(sp * Math.PI);
+        drawText(ctx, 'DELVE', W / 2, logoY, big, '#fffbe6', 'center');
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+
+    // the rest of the screen fades in after the logo settles
+    const rev = this.landed ? Math.min(1, this.shineT / 0.35) : 0;
+    if (rev <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = rev;
     drawText(ctx, 'THE KEEP OF ALARIC', W / 2, ly + 7 * big + 12, Math.max(2, s), PAL.ui, 'center', '#000');
-    // hero strolling on a floor strip
-    const stripY = H * 0.56;
-    const ts = 46;
+    const stripY = H * 0.56, ts = 46;
     for (let c = -1; c < Math.ceil(W / ts) + 1; c++) Art.floor(ctx, c * ts, stripY, ts);
     ctx.fillStyle = 'rgba(2,3,6,0.35)'; ctx.fillRect(0, stripY, W, ts);
     Art.hero(ctx, 'right', this.frame, this.heroX, stripY - 8, ts, false);
-    if (Math.floor(this.t * 1.6) % 2 === 0) {
+    drawText(ctx, 'A DUNGEON PUZZLE', W / 2, H - 40, 1, PAL.uiDim, 'center');
+    ctx.restore();
+    if (rev >= 1 && Math.floor(this.t * 1.6) % 2 === 0) {
       drawText(ctx, 'TAP TO BEGIN', W / 2, H * 0.76, Math.max(2, s - 1), PAL.ui, 'center', '#000');
     }
-    drawText(ctx, 'A DUNGEON PUZZLE', W / 2, H - 40, 1, PAL.uiDim, 'center');
   },
   _go() {
     Snd.select();
