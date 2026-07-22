@@ -141,13 +141,11 @@ const ScreenGame = {
     this._entryCell = { r, c };
   },
 
-  _maybeRoomIntro() {
-    const room = this.dungeon.rooms[this.roomId];
-    if (this.firstTime && room.intro && !this._seenIntro(this.roomId)) {
-      this._markIntro(this.roomId);
-      this.showDialog(room.intro, () => {});
-    }
-  },
+  // Per-room entry popups are intentionally disabled — walking into a room
+  // never interrupts the player. Mechanics are taught reactively (interaction
+  // toasts) and in the first-run intro; anything more belongs in a dedicated
+  // tutorial dungeon. Room `intro` strings in the data are left unused.
+  _maybeRoomIntro() {},
   _seenIntro(id) { return this._introSeen && this._introSeen[id]; },
   _markIntro(id) { (this._introSeen = this._introSeen || {})[id] = true; },
 

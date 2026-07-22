@@ -239,7 +239,7 @@ const ScreenIntro = {
     this.page++;
     if (this.page >= this.cards.length) {
       Save.data.meta.seenIntro = true; Save.write();
-      App.setScreen('game', { gameMode: 'story', dungeonId: 'd1' });
+      App.setScreen('menu');
     }
   },
   onTap() { this._next(); },
@@ -426,6 +426,7 @@ const ScreenSettings = {
     rows.push({ type: 'toggle', label: 'HAPTICS', get: () => s.haptics, set: v => { s.haptics = v; Save.write(); if (v) Platform.haptic(); } });
     rows.push({ type: 'toggle', label: 'REDUCED FLASH', get: () => s.reducedFlash, set: v => { s.reducedFlash = v; Save.write(); } });
     rows.push({ type: 'toggle', label: 'TUTORIAL TIPS', get: () => s.tips !== false, set: v => { s.tips = v; Save.write(); } });
+    rows.push({ type: 'button', label: 'REPLAY INTRO', action: () => { Snd.select(); App.setScreen('intro'); } });
     rows.push({ type: 'header', label: 'ACCOUNT' });
     rows.push({ type: 'button', label: this.confirmWipe ? 'TAP AGAIN TO ERASE ALL' : 'RESET PROGRESS', danger: true, action: () => this._reset() });
     rows.push({ type: 'button', label: 'LOG OUT', disabled: true, action: () => this._say('ACCOUNTS ARE COMING SOON.') });
