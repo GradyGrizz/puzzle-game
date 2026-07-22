@@ -57,6 +57,7 @@ const ScreenGame = {
 
     this.state = parseLevel(this.lv);
     this._initStoryFields();
+    this._setPlayerCell(this.state.player.r, this.state.player.c);
     Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
   },
 
@@ -90,6 +91,13 @@ const ScreenGame = {
     this._song = null;        // current music track (avoid restarts per room)
     this._outroDone = false;
     this.roomTrans = null;
+    // ── free-movement (Link's Awakening style) ──
+    this.held = { up: false, down: false, left: false, right: false };
+    this.px = 1.5; this.py = 1.5; this.pdir = 'down';
+    this.pmoving = false; this.walkPhase = 0; this.pframe = 0;
+    this.pushT = 0; this.blockSlide = null;
+    this.steps = 0; this._lastTile = null; this._entryCell = null;
+    this._needToastT = 0;
     const hintBtn = document.getElementById('btn-hint');
     if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
     document.body.classList.toggle('no-relics', this.gameMode !== 'story');
@@ -119,8 +127,18 @@ const ScreenGame = {
     this.filled = {};
     this._recomputeFilled();
     this.anim = null; this.heldDir = null; this.queued = null;
+    this.blockSlide = null; this.pushT = 0;
+    this._setPlayerCell(st.player.r, st.player.c);
     const song = st.dark ? 'deep' : 'dungeon';
     if (song !== this._song) { Snd.playMusic(song); this._song = song; }
+  },
+
+  // place the free-moving player at the centre of tile (r,c)
+  _setPlayerCell(r, c) {
+    this.px = c + 0.5; this.py = r + 0.5;
+    this.state.player.r = r; this.state.player.c = c;
+    this._lastTile = r + ',' + c;
+    this._entryCell = { r, c };
   },
 
   _maybeRoomIntro() {
@@ -266,7 +284,55 @@ const ScreenGame = {
   // you must equip the blade before it cuts, the shield before it wards
   inventory() { return Save.data.story.equipped; },
 
-  movesLeft() { return this.budget ? Math.max(0, this.budget - this.state.moves) : null; },
+  movesLeft() { return this.budget ? Math.max(0, this.budget - (this.steps || 0)) : null; },
+
+  // undo history for the free-movement world: engine state + player position
+  _pushHistory(beforeState) {
+    this.history.push({ st: beforeState, px: this.px, py: this.py, steps: this.steps });
+    if (this.history.length > 200) this.history.shift();
+  },
+  _needToast(item) {
+    if (this._needToastT > 0) return;
+    this._needToastT = 1.2;
+    if (item === 'key') { this.showToast('LOCKED. FIND A KEY.'); return; }
+    if (Save.hasItem(item) && !Save.isEquipped(item)) {
+      const m = { sword: 'EQUIP YOUR BLADE FIRST!', shield: 'RAISE YOUR SHIELD FIRST!', glove: 'EQUIP THE TITAN GLOVE FIRST!', boots: 'EQUIP THE STRIDER BOOTS FIRST!', lantern: 'EQUIP THE PALE LANTERN FIRST!' };
+      this.showToast(m[item] || 'EQUIP THAT GEAR FIRST!'); this._pulseGear(true); return;
+    }
+    const m = { sword: 'TOO THICK. YOU NEED A BLADE.', glove: 'FAR TOO HEAVY TO PUSH.', shield: 'THE FLAMES DRIVE YOU BACK.', boots: 'A CHASM. YOU NEED STRIDER BOOTS.' };
+    if (m[item]) this.showToast(m[item]);
+  },
+  // react to a frame of free movement; returns true if it changed the mode
+  _handleFreeEvents(evs) {
+    const has = t => evs.some(e => e.type === t);
+    if (has('coin')) { Snd.coin(); if (this.gameMode === 'story') this.coinsRun = (this.coinsRun || 0) + 1; }
+    if (has('key')) Snd.keyGet();
+    if (has('unlock')) Snd.doorUnlock();
+    if (has('crackBreak')) Snd.crack();
+    if (has('switchOn')) Snd.switchOn();
+    if (has('snuff')) Snd.snuff();
+    if (has('cut')) { const e = evs.find(x => x.type === 'cut'); this.cutAnim = { r: e.r, c: e.c, t: 0.25 }; Snd.cut(); }
+    if (has('push')) { Snd.push(); Platform.haptic(); }
+    if (has('blockFall')) { const e = evs.find(x => x.type === 'blockFall'); this.fallAnim = { r: e.r, c: e.c, t: 0 }; Snd.fall(); this.filled[e.r + ',' + e.c] = true; this.blockSlide = null; }
+    if (has('exitOpen')) { Snd.exitOpen(); this.exitGlow = 1; if (!Save.data.settings.reducedFlash) this.flash = 1; }
+    const need = evs.find(e => e.type === 'needItem'); if (need) this._needToast(need.item);
+    if (has('lockedBump')) this._needToast('key');
+    if (has('shutterBump') && this._needToastT <= 0) { this._needToastT = 1.2; this.showToast('SEALED. SOLVE THIS ROOM.'); }
+    const chestE = evs.find(e => e.type === '_chest');
+    if (chestE) {
+      this._pushHistory(chestE.before);
+      this.state = chestE.res.state;
+      this.pendingExitOpen = chestE.res.events.some(e => e.type === 'exitOpen');
+      this.mode = 'chest';
+      this.chestAnim = { phase: 0, t: 0, item: chestE.res.events.find(e => e.type === 'chest').item };
+      Snd.chestOpen();
+      return true;
+    }
+    if (has('win')) { this.mode = 'won'; this.wonT = 0; Snd.fanfare(); Platform.haptic('heavy'); return true; }
+    const door = evs.find(e => e.type === 'door');
+    if (door) { this._beginRoomTransition(door.side); return true; }
+    return false;
+  },
 
   // ── input ──
   attemptMove(dc, dr, fromRepeat) {
@@ -376,16 +442,17 @@ const ScreenGame = {
   },
 
   onDirPress(dc, dr) {
-    this.heldDir = { dc, dr };
-    this.holdTimer = 0;
-    if (this.mode === 'play') this.attemptMove(dc, dr);
-    else if (this.mode === 'moving') this.queued = { dc, dr };
+    if (this.mode === 'play') {
+      if (dc < 0) this.held.left = true; else if (dc > 0) this.held.right = true;
+      if (dr < 0) this.held.up = true; else if (dr > 0) this.held.down = true;
+    }
     else if (this.mode === 'gear') GearUI.onDir(this, dc, dr);
     else if (this.mode === 'paused' && dr) this.pauseList.nav(dr);
     else if ((this.mode === 'results' || this.mode === 'runover') && dr && this.resultInfo) this.resultInfo.list.nav(dr);
   },
   onDirRelease(dc, dr) {
-    if (this.heldDir && this.heldDir.dc === dc && this.heldDir.dr === dr) this.heldDir = null;
+    if (dc < 0) this.held.left = false; else if (dc > 0) this.held.right = false;
+    if (dr < 0) this.held.up = false; else if (dr > 0) this.held.down = false;
   },
 
   onConfirm() {
@@ -457,18 +524,21 @@ const ScreenGame = {
     }
   },
   onUndo() {
-    if (this.mode !== 'play' && this.mode !== 'moving') return;
+    if (this.mode !== 'play') return;
     if (!this.history.length) { Snd.error(); return; }
-    this.anim = null; this.fallAnim = null;
-    this.state = this.history.pop();
+    this.fallAnim = null; this.blockSlide = null; this.pushT = 0;
+    const h = this.history.pop();
+    this.state = h.st; this.px = h.px; this.py = h.py; this.steps = h.steps;
+    this.state.player.r = Math.floor(this.py); this.state.player.c = Math.floor(this.px);
+    this._lastTile = this.state.player.r + ',' + this.state.player.c;
+    if (this.gameMode === 'story') { this.rooms[this.roomId] = this.state; this.dkeys = this.state.keys; }
     this._recomputeFilled();
-    this.mode = 'play';
     Snd.undo();
   },
   onReset() {
-    if (this.mode !== 'play' && this.mode !== 'moving') return;
-    this.anim = null; this.fallAnim = null;
-    this.history.push(this.state);
+    if (this.mode !== 'play') return;
+    this._pushHistory(cloneState(this.state));
+    this.fallAnim = null; this.blockSlide = null; this.pushT = 0;
     this.state = parseLevel(this.lv);
     if (this.gameMode === 'story') {
       const room = this.dungeon.rooms[this.roomId];
@@ -476,9 +546,11 @@ const ScreenGame = {
       this.state.keys = this.dkeys;
       this.rooms[this.roomId] = this.state;   // keep persisted room in sync
     }
+    // return the player to where they entered this room
+    const e = this._entryCell || { r: this.state.player.r, c: this.state.player.c };
+    this._setPlayerCell(e.r, e.c);
     this.filled = {};
     this.exitGlow = 0;
-    this.mode = 'play';
     Snd.back();
   },
   _recomputeFilled() {
@@ -570,7 +642,7 @@ const ScreenGame = {
     }
     this.resultInfo = {
       title: 'DEPTH ' + run.depth + ' CLEARED', sub: 'THE STAIRS SPIRAL DOWN...',
-      lines: ['MOVES: ' + this.state.moves + ' / ' + this.budget, 'RUN COINS: ' + run.coins],
+      lines: ['MOVES: ' + (this.steps||0) + ' / ' + this.budget, 'RUN COINS: ' + run.coins],
       list: new MenuList([
         { label: 'DELVE DEEPER', action: () => { run.depth++; App.setScreen('game', { gameMode: 'challenge', run }); } },
         { label: 'END RUN', action: () => { this._recordChallenge(); App.setScreen('challenge'); } },
@@ -652,7 +724,7 @@ const ScreenGame = {
     if (this.cutAnim) { this.cutAnim.t -= dt; if (this.cutAnim.t <= 0) this.cutAnim = null; }
     if (this.hintPath) { this.hintPath.t -= dt; if (this.hintPath.t <= 0) this.hintPath = null; }
 
-    if (this.gameMode === 'timed' && (this.mode === 'play' || this.mode === 'moving')) {
+    if (this.gameMode === 'timed' && this.mode === 'play') {
       this.levelMs += dt * 1000;
     }
     if (this._autoNext != null && this.mode === 'results') {
@@ -683,15 +755,13 @@ const ScreenGame = {
       return;
     }
 
-    if (this.mode === 'moving' && this.anim) {
-      this.anim.t += dt * 1000;
-      this.frame = 1 + Math.floor((this.anim.t / moveMs()) * 3.99) % 4;
-      if (this.anim.t >= moveMs()) { this.frame = 0; this.settleMove(); }
-    } else if (this.mode === 'play') {
-      if (this.heldDir) {
-        this.holdTimer += dt;
-        if (this.holdTimer > 0.16) { this.holdTimer = 0; this.attemptMove(this.heldDir.dc, this.heldDir.dr, true); }
-      }
+    if (this.blockSlide) { this.blockSlide.t += dt; if (this.blockSlide.t >= 0.12) this.blockSlide = null; }
+    if (this._needToastT > 0) this._needToastT -= dt;
+    if (this.mode === 'play') {
+      const evs = FM.update(this, dt);
+      if (evs.length && this._handleFreeEvents(evs)) return;   // mode may have changed
+      this.pframe = this.pmoving ? (1 + Math.floor(this.walkPhase * 5) % 4) : 0;
+      if (this.gameMode === 'challenge' && this.movesLeft() === 0) { this._runOver(); return; }
     }
 
     if (this.mode === 'chest' && this.chestAnim) {
@@ -768,13 +838,13 @@ const ScreenGame = {
     }
 
     for (const b of st.blocks) {
-      Art.block(ctx, bx + b.c * T, by + b.r * T, T, false);
-    }
-    const pushEv = (this.anim && this.anim.push) || null;
-    if (pushEv && this.anim) {
-      const pr = this.anim.t / moveMs();
-      const br = pushEv.fr + (pushEv.tr - pushEv.fr) * pr;
-      const bc = pushEv.fc + (pushEv.tc - pushEv.fc) * pr;
+      let bc = b.c, br = b.r;
+      const sl = this.blockSlide;
+      if (sl && b.r === sl.tr && b.c === sl.tc) {
+        const pr = Math.min(1, sl.t / 0.12);
+        bc = sl.fc + (sl.tc - sl.fc) * pr;
+        br = sl.fr + (sl.tr - sl.fr) * pr;
+      }
       Art.block(ctx, Math.round(bx + bc * T), Math.round(by + br * T), T, false);
     }
 
@@ -796,17 +866,11 @@ const ScreenGame = {
       }
     }
 
-    let hr = st.player.r, hc = st.player.c;
-    let pushing = false;
-    if (this.anim) {
-      const pr = this.anim.t / moveMs();
-      const np = this.anim.newState.player;
-      hr = this.anim.from.r + (np.r - this.anim.from.r) * pr;
-      hc = this.anim.from.c + (np.c - this.anim.from.c) * pr;
-      pushing = !!this.anim.push;
-    }
-    const animSt = this.anim ? this.anim.newState : st;
-    Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing, this.mode !== 'moving');
+    // continuous player position (tile-box top-left = centre minus half a tile)
+    const hc = this.px - 0.5, hr = this.py - 0.5;
+    const pushing = this.pushT > 0 || !!this.blockSlide;
+    const idle = !this.pmoving && !pushing;
+    Art.hero(ctx, this.pdir, this.pframe, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing, idle);
 
     // darkness: a lit circle only when the PALE LANTERN is equipped;
     // otherwise the dark closes in and nudges you to the gear screen
@@ -973,7 +1037,7 @@ const ScreenGame = {
     } else if (this.gameMode === 'timed') {
       drawText(ctx, fmtMs(this.levelMs + 0) + '  TOTAL ' + fmtMs(this.run.totalMs + this.levelMs), W / 2, 30, 1, PAL.goldHi, 'center');
     } else {
-      drawText(ctx, 'MOVES ' + this.state.moves, W / 2, 30, 1, PAL.uiDim, 'center');
+      drawText(ctx, 'STEPS ' + (this.steps||0), W / 2, 30, 1, PAL.uiDim, 'center');
     }
     // during play, preview coins collected this level; after the award
     // (results/runover) the save already includes them
@@ -984,7 +1048,7 @@ const ScreenGame = {
       Art.keyIcon(ctx, W - 110, 12, 16);
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');
     }
-    if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && this.state.moves < 6 && Save.data.settings.tips !== false) {
+    if (this.gameMode === 'story' && this.lv.hint && this.firstTime && this.mode === 'play' && (this.steps||0) < 8 && Save.data.settings.tips !== false) {
       drawTextFit(ctx, this.lv.hint, W / 2, hudH + 6, W - 16, 1, PAL.gold, 'center', '#000');
     }
   },
