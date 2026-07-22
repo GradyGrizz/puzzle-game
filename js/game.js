@@ -802,7 +802,7 @@ const ScreenGame = {
       pushing = !!this.anim.push;
     }
     const animSt = this.anim ? this.anim.newState : st;
-    Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
+    Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing, this.mode !== 'moving');
 
     // darkness: a lit circle only when the PALE LANTERN is equipped;
     // otherwise the dark closes in and nudges you to the gear screen

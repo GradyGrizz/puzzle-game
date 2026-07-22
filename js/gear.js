@@ -101,7 +101,7 @@ const GearUI = {
     const boxW = Math.min(W - 48, 300), boxX = (W - boxW) / 2, boxY = top + 6, boxH = 132;
     Art.panel(ctx, boxX, boxY, boxW, boxH);
     const T = 84;
-    Art.hero(ctx, 'down', 0, W / 2 - T / 2, boxY + 20, T, false);
+    Art.hero(ctx, 'down', 0, W / 2 - T / 2, boxY + 20, T, false, true);
     // equipped summary under hero
     const eq = this.slots.filter(sl => Save.isEquipped(sl.item));
     drawText(ctx, 'WORN', W / 2, boxY + boxH - 30, 1, PAL.uiDim, 'center');

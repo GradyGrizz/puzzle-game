@@ -476,23 +476,25 @@ item(ctx, type, x, y, s) {
 },
 
 // ── hero sprite sheet ────────────────────────────────────────
-WALK: {
-  up:    [[221,343,46,65],[339,343,48,65],[461,343,48,65],[578,343,48,65]],
-  down:  [[220,411,47,64],[341,411,46,64],[461,411,46,64],[580,411,47,64]],
-  left:  [[217,480,51,63],[337,480,52,63],[459,480,49,63],[577,480,50,63]],
-  right: [[222,551,49,64],[341,551,50,64],[461,551,49,64],[580,551,49,64]],
+// All frame boxes below were auto-derived from hero2.png by connected-
+// component detection (scratchpad/ccl.js), so they're tight and aligned.
+// The sheet has four sections (IDLE, WALK, PUSH, PULL); each has real
+// up/down/left/right rows — including a dedicated PUSH-LEFT row, so no
+// mirroring is needed (an earlier build wrongly mirrored right for left).
+IDLE: {
+  up:    [218,45,46,61], down: [218,111,46,61], left: [219,178,46,61], right: [221,244,45,61],
 },
-// PUSH rows from hero2.png. The sheet has: a back-view row (up), a
-// front-view row (down), and a RIGHT-facing profile row. There is NO
-// dedicated left-facing push row — the sheet's fourth push row is just
-// another right-facing pose — so `left` is the right frames mirrored
-// horizontally at draw time (handled in hero()). Boxes measured tight
-// from the sheet's non-transparent content.
+WALK: {
+  up:    [[221,343,46,64],[339,342,48,67],[461,343,47,66],[578,343,47,65]],
+  down:  [[220,412,47,63],[341,411,46,64],[461,412,46,63],[580,412,46,63]],
+  left:  [[218,481,49,62],[337,481,52,63],[459,481,48,63],[577,481,50,63]],
+  right: [[222,551,49,65],[341,551,50,65],[461,551,48,64],[580,551,49,65]],
+},
 PUSH: {
-  up:    [[214,653,64,63],[333,653,63,63],[453,653,63,63],[572,653,63,63]], // back view
-  down:  [[220,728,44,62],[340,728,44,62],[460,728,44,62],[579,728,44,61]], // front view
-  right: [[209,876,69,62],[329,876,68,62],[449,875,68,63],[568,876,67,62]], // right profile
-  // left := right, drawn flipped
+  up:    [[213,653,66,64],[332,652,65,65],[452,653,65,64],[570,653,66,64]], // back view
+  down:  [[220,727,45,64],[339,728,45,63],[459,727,45,64],[579,727,44,65]], // front view
+  left:  [[208,798,71,65],[327,798,70,65],[447,797,70,66],[566,798,70,65]], // left profile
+  right: [[208,875,71,64],[328,875,70,64],[448,875,70,64],[567,875,69,64]], // right profile
 },
 
 sheet: null,
@@ -547,16 +549,13 @@ _activeSheet() {
   return cached;
 },
 
-hero(ctx, dir, frame, px, py, tile, pushing) {
-  // no left-push sprite on the sheet -> mirror the right-push frames
-  let flip = false, frames;
-  if (pushing) {
-    if (dir === 'left') { frames = this.PUSH.right; flip = true; }
-    else frames = this.PUSH[dir];
-  } else {
-    frames = this.WALK[dir];
-  }
-  const [sx, sy, sw, sh] = frames[frame % 4];
+hero(ctx, dir, frame, px, py, tile, pushing, idle) {
+  // pick the right frame box: idle pose when standing, else walk/push cycle
+  let box;
+  if (pushing) box = this.PUSH[dir][frame % 4];
+  else if (idle) box = this.IDLE[dir];
+  else box = this.WALK[dir][frame % 4];
+  const [sx, sy, sw, sh] = box;
   const src = this._activeSheet();
   if (!src || (src.complete === false)) return;
   const dh = Math.round(tile * 1.05);
@@ -570,15 +569,7 @@ hero(ctx, dir, frame, px, py, tile, pushing) {
   ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  if (flip) {
-    ctx.save();
-    ctx.translate(dx + dw, dy);
-    ctx.scale(-1, 1);
-    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, dw, dh);
-    ctx.restore();
-  } else {
-    ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
-  }
+  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
 },
 
 // ── UI chrome ────────────────────────────────────────────────
