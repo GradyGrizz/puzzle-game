@@ -95,7 +95,7 @@ const ScreenGame = {
     this.held = { up: false, down: false, left: false, right: false };
     this.px = 1.5; this.py = 1.5; this.pdir = 'down';
     this.pmoving = false; this.walkPhase = 0; this.pframe = 0;
-    this.pushT = 0; this.blockSlide = null;
+    this.pushT = 0; this.pushGrace = 0; this.blockSlide = null;
     this.steps = 0; this._lastTile = null; this._entryCell = null;
     this._needToastT = 0;
     const hintBtn = document.getElementById('btn-hint');
@@ -868,7 +868,7 @@ const ScreenGame = {
 
     // continuous player position (tile-box top-left = centre minus half a tile)
     const hc = this.px - 0.5, hr = this.py - 0.5;
-    const pushing = this.pushT > 0 || !!this.blockSlide;
+    const pushing = this.pushGrace > 0 || !!this.blockSlide;
     const idle = !this.pmoving && !pushing;
     Art.hero(ctx, this.pdir, this.pframe, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing, idle);
 

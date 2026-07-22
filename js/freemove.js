@@ -80,6 +80,7 @@ const FM = {
 
   update(g, dt) {
     const events = [];
+    g.pushGrace = Math.max(0, (g.pushGrace || 0) - dt);   // keep the push pose steady between shoves
     if (g.gameMode === 'story') g._doors = g._doorCells(); else g._doors = null;
     const h = g.held || {};
     let vx = (h.right ? 1 : 0) - (h.left ? 1 : 0);
@@ -137,8 +138,12 @@ const FM = {
       const { res, before } = this._act(g, chest.dir);
       if (res.ok && res.events.some(e => e.type === 'chest')) { events.push({ type: '_chest', res, before }); return; }
     }
-    // 4) shove a block: sustained push, then slide one tile via the engine
+    // 4) shove a block: sustained push, then slide one tile via the engine.
+    // We DON'T teleport the player onto the block's old cell — the shove
+    // vacates that cell and held input carries the player in smoothly, so the
+    // motion stays continuous (no per-push snap) and the push pose holds.
     if (block) {
+      g.pushGrace = 0.16;
       this._align(g, block, dt);
       g.pushT = (g.pushT || 0) + dt;
       if (g.pushT >= this.PUSH_T) {
@@ -148,7 +153,6 @@ const FM = {
           g._pushHistory(before);
           g.state = res.state;
           g.blockSlide = { fr: pushEv.fr, fc: pushEv.fc, tr: pushEv.tr, tc: pushEv.tc, t: 0 };
-          this.setCell(g, res.state.player.r, res.state.player.c); // follow the stone in
           events.push(...res.events);
         } else if (!res.ok) {
           const need = res.events.find(e => e.type === 'needItem');

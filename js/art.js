@@ -545,8 +545,9 @@ item(ctx, type, x, y, s) {
 // The sheet has four sections (IDLE, WALK, PUSH, PULL); each has real
 // up/down/left/right rows — including a dedicated PUSH-LEFT row, so no
 // mirroring is needed (an earlier build wrongly mirrored right for left).
+// NB: on this sheet the idle side-rows are ordered RIGHT then LEFT
 IDLE: {
-  up:    [218,45,46,61], down: [218,111,46,61], left: [219,178,46,61], right: [221,244,45,61],
+  up:    [218,45,46,61], down: [218,111,46,61], left: [221,244,45,61], right: [219,178,46,61],
 },
 WALK: {
   up:    [[221,343,46,64],[339,342,48,67],[461,343,47,66],[578,343,47,65]],
@@ -614,9 +615,11 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
-  // pick the right frame box: idle pose when standing, else walk/push cycle
+  // pick the right frame box: idle pose when standing, else walk/push cycle.
+  // The sheet's PUSH.up frame reaches its arms out to the side (reads as a
+  // side-push), so for the up-push we use the clean back-view WALK.up cycle.
   let box;
-  if (pushing) box = this.PUSH[dir][frame % 4];
+  if (pushing) box = (dir === 'up' ? this.WALK.up : this.PUSH[dir])[frame % 4];
   else if (idle) box = this.IDLE[dir];
   else box = this.WALK[dir][frame % 4];
   const [sx, sy, sw, sh] = box;
