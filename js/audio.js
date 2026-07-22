@@ -154,8 +154,9 @@ const Snd = {
   coin()      { this.tone(988, 0.06, 'square', 0.13); this.tone(1319, 0.16, 'square', 0.13, this.now(0.06)); },
   keyGet()    { [660, 880, 1100].forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.16, this.now(i * 0.07))); },
   doorUnlock(){ this.noise(0.05, 0.10, 0, 800); this.tone(392, 0.08, 'square', 0.13, this.now(0.06)); this.tone(523, 0.14, 'square', 0.13, this.now(0.13)); },
-  // stepping through a doorway — Pokémon Emerald-style downward glissando + soft step-in
-  door()      { this.tone(700, 0.17, 'square', 0.12, 0, 320); this.tone(340, 0.11, 'triangle', 0.09, this.now(0.15), 190); this.noise(0.05, 0.09, 0, 600); },
+  // stepping through a doorway — Gen-3/Emerald "enter door" jingle: a quick,
+  // bright descending arpeggio run (that fast doo-doo-doo-doo down the scale)
+  door()      { [1319, 1047, 880, 698, 523].forEach((f, i) => this.tone(f, 0.065, 'square', 0.13, this.now(i * 0.03))); },
   cut()       { this.noise(0.10, 0.14, 0, 1600); this.tone(240, 0.08, 'sawtooth', 0.07); },
   snuff()     { this.noise(0.22, 0.12, 0, 900); this.tone(180, 0.18, 'sine', 0.10, 0, 60); },
   crack()     { this.noise(0.14, 0.16, 0, 500); this.tone(150, 0.1, 'square', 0.08, 0, 60); },

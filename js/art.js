@@ -613,14 +613,29 @@ _sliceAux(dir, img) {
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
     const d = c.getImageData(0, 0, W, H).data, A = (x, y) => d[(y * W + x) * 4 + 3];
-    const cw = W / 4, frames = [];
+    const cw = W / 4, raw = [];
     for (let i = 0; i < 4; i++) {
       const x0 = Math.floor(i * cw), x1 = Math.floor((i + 1) * cw);
       let minX = x1, maxX = x0, minY = H, maxY = 0, hit = false;
       for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) if (A(x, y) > 40) { hit = true; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
-      if (hit) frames.push([minX, minY, maxX - minX + 1, maxY - minY + 1]);
+      if (hit) raw.push({ minX, maxX, minY, maxY });
     }
-    if (frames.length === 4) this._aux[dir] = { img, frames };
+    if (raw.length !== 4) return;
+    // UNIFORM frame boxes: a tight, independent crop per frame gives each frame
+    // a different width/height, and since hero() sizes the draw from sw/sh the
+    // sprite resizes and hops every frame (the jitter). Share one Y band and one
+    // width across all four frames, each centered on its own content, so the
+    // pose sways naturally but the sprite stays a constant size on screen.
+    const top = Math.min.apply(null, raw.map(f => f.minY));
+    const bot = Math.max.apply(null, raw.map(f => f.maxY));
+    const fw = Math.max.apply(null, raw.map(f => f.maxX - f.minX + 1));
+    const bh = bot - top + 1;
+    const frames = raw.map(f => {
+      const cx = (f.minX + f.maxX) / 2;
+      const x = Math.max(0, Math.min(W - fw, Math.round(cx - fw / 2)));
+      return [x, top, fw, bh];
+    });
+    this._aux[dir] = { img, frames };
   } catch (e) { /* cross-origin/tainted (file://) — fall back to main sheet */ }
 },
 
