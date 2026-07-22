@@ -206,6 +206,8 @@ block(ctx, x, y, t, glow) {
 
 // block drawn floating over pit (falling anim uses scale)
 blockRaw(ctx, x, y, t, scale) {
+  const sc = scale == null ? 1 : scale;
+  if (this._ready(this.img.block)) { this._blit(ctx, this.img.block, x + t / 2, y + t / 2, t * 0.94 * sc, t * 0.94 * sc); return; }
   const p = Math.floor(t * .1), bs0 = t - p * 2;
   const bs = Math.max(2, Math.floor(bs0 * (scale == null ? 1 : scale)));
   const off = Math.floor((bs0 - bs) / 2);
@@ -592,10 +594,12 @@ loadSprites(onReady) {
   this.loadAssets();
 },
 
-// load push_up.png / push_left.png if they exist and auto-slice 4 tight
-// frames; missing files just fall back to the main-sheet poses.
+// load push_up.png if present and auto-slice 4 tight frames; missing files
+// just fall back to the main-sheet poses. (push_left.png is intentionally
+// NOT used: its four frames slice to very uneven widths, so the sprite jerks
+// frame-to-frame. The mirrored PUSH.right frames are uniform and read clean.)
 _loadAux() {
-  const files = { up: 'push_up.png', left: 'push_left.png' };
+  const files = { up: 'push_up.png' };
   for (const dir in files) {
     const img = new Image();
     img.onload = () => this._sliceAux(dir, img);
@@ -625,7 +629,7 @@ _sliceAux(dir, img) {
 // so the game never blocks on these.
 ASSETS: {
   floor0: 'art/tile_floor0.png', floor1: 'art/tile_floor1.png', floor2: 'art/tile_floor2.png',
-  wall: 'art/tile_wall.png', coin: 'art/tile_coin.png', block: 'art/tile_block.png',
+  wall: 'art/tile_wall.png', coin: 'art/tile_coin.png', block: 'art/tile_block_flat.png',
   switch: 'art/tile_switch.png', door: 'art/tile_door.png',
   relic_sword: 'art/relic_sword.png', relic_shield: 'art/relic_shield.png',
   relic_glove: 'art/relic_glove.png', relic_lantern: 'art/relic_lantern.png',
