@@ -91,6 +91,11 @@ const FM = {
 
     const contacts = [];
     const step = this.SPEED * dt;
+    // corner-assist: pure-cardinal movement funnels you into a gap (doorway
+    // or around a block edge) when you're straddling a blocked/open pair —
+    // the Link's-Awakening feel that keeps you from bonking every doorframe
+    if (vy && !vx) this._corner(g, true, vy, step);
+    else if (vx && !vy) this._corner(g, false, vx, step);
     if (vx) this._axis(g, vx * step, 0, contacts);
     if (vy) this._axis(g, 0, vy * step, contacts);
 
@@ -153,6 +158,26 @@ const FM = {
       }
     } else {
       g.pushT = 0;
+    }
+  },
+
+  // nudge perpendicular to slip into an opening straight ahead
+  _corner(g, vertical, v, step) {
+    const H = this.HALF, dir = v > 0 ? 1 : -1;
+    if (vertical) {
+      const ahead = Math.floor(g.py + dir * (H + 0.02));
+      const cL = Math.floor(g.px - H + 0.02), cR = Math.floor(g.px + H - 0.02);
+      if (cL === cR) return;                          // fully inside one column
+      const sL = this.solid(g, ahead, cL), sR = this.solid(g, ahead, cR);
+      if (sL && !sR) g.px = Math.min(g.px + step, cR + 0.5);
+      else if (sR && !sL) g.px = Math.max(g.px - step, cL + 0.5);
+    } else {
+      const ahead = Math.floor(g.px + dir * (H + 0.02));
+      const rT = Math.floor(g.py - H + 0.02), rB = Math.floor(g.py + H - 0.02);
+      if (rT === rB) return;
+      const sT = this.solid(g, rT, ahead), sB = this.solid(g, rB, ahead);
+      if (sT && !sB) g.py = Math.min(g.py + step, rB + 0.5);
+      else if (sB && !sT) g.py = Math.max(g.py - step, rT + 0.5);
     }
   },
 
