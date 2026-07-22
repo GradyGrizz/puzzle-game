@@ -43,13 +43,16 @@ const App = {
     requestAnimationFrame(ts => this.loop(ts));
   },
 
-  safeTop: 0,
+  safeTop: 0, framed: false,
   resize() {
     const dpr = window.devicePixelRatio || 1;
+    this._applyFrame();                       // may resize #device (desktop bezel)
+    const dev = document.getElementById('device');
+    this.W = dev.clientWidth;
+    this.H = dev.clientHeight;
     const probe = document.getElementById('safe-probe');
     this.safeTop = probe ? probe.offsetHeight : 0;
-    this.W = window.innerWidth;
-    this.H = window.innerHeight;
+    if (this.framed) this.safeTop = Math.max(this.safeTop, 26); // reserve notch
     this.canvas.width = this.W * dpr;
     this.canvas.height = this.H * dpr;
     this.canvas.style.width = this.W + 'px';
@@ -57,6 +60,29 @@ const App = {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
   },
+
+  // On a mouse-driven, roomy window (i.e. a desktop browser) we shrink the
+  // game into a centred phone-shaped bezel — this is an iPhone/Android game,
+  // so desktop gets a phone preview rather than a stretched full screen.
+  _applyFrame() {
+    const fine = window.matchMedia('(pointer: fine)').matches;
+    const roomy = window.innerWidth > 620 && window.innerHeight > 560;
+    this.framed = fine && roomy;
+    document.body.classList.toggle('framed', this.framed);
+    const dev = document.getElementById('device');
+    if (!this.framed) { dev.style.width = ''; dev.style.height = ''; return; }
+    const AR = 390 / 844;                      // iPhone-ish portrait aspect
+    let h = Math.min(880, window.innerHeight - 28);
+    let w = Math.round(h * AR);
+    const maxW = window.innerWidth - 28;
+    if (w > maxW) { w = maxW; h = Math.round(w / AR); }
+    dev.style.width = w + 'px';
+    dev.style.height = h + 'px';
+  },
+
+  // in-game on-screen controls take the bottom slice on real touch devices
+  // AND in the desktop phone frame — reserve space for them either way
+  padControls() { return this.isTouch || this.framed; },
 
   setScreen(name, params, instant) {
     if (instant) {

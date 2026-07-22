@@ -716,10 +716,10 @@ const ScreenGame = {
     ctx.fillStyle = PAL.bg; ctx.fillRect(0, 0, W, H);
     const st = this.state;
     const hudH = 48;
-    const botH = App.isTouch ? 248 : 36;
+    const botH = App.padControls() ? 248 : 36;
     // cap tile size so the board stays compact and proportionate to the
     // controls instead of stretching edge-to-edge on big phones
-    const maxT = App.isTouch ? 30 : 40;
+    const maxT = App.padControls() ? 30 : 40;
     const T = Math.max(8, Math.min(maxT, Math.floor(Math.min((W - 8) / st.w, (H - hudH - botH) / st.h))));
     const bx = Math.floor((W - T * st.w) / 2);
     const by = hudH + Math.floor((H - hudH - botH - T * st.h) / 2);
@@ -942,7 +942,7 @@ const ScreenGame = {
     const lh = 9 * s + 4;
     const ph = lines.length * lh + 44;
     const px = (W - pw) / 2;
-    const py = H - ph - (App.isTouch ? 262 : 50);
+    const py = H - ph - (App.padControls() ? 262 : 50);
     Art.panel(ctx, px, py, pw, ph);
     let shown = Math.floor(this.dialog.chars);
     let ty = py + 18;
@@ -979,7 +979,7 @@ const ScreenGame = {
       const info = ITEMS[ca.item];
       const s = Math.max(2, Math.floor(W / 240));
       const pw = Math.min(W - 32, 460), ph = 96;
-      const px = (W - pw) / 2, py = H - ph - (App.isTouch ? 262 : 50);
+      const px = (W - pw) / 2, py = H - ph - (App.padControls() ? 262 : 50);
       Art.panel(ctx, px, py, pw, ph);
       drawText(ctx, 'YOU GOT THE ' + info.name + '!', W / 2, py + 16, s, PAL.goldHi, 'center');
       drawText(ctx, info.desc, W / 2, py + 16 + 10 * s, Math.max(1, s - 1), PAL.ui, 'center');

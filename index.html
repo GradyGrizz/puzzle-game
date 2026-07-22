@@ -29,8 +29,34 @@ canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+/* the game lives inside #device. On a real phone it fills the screen; on a
+   desktop browser we shrink it into a centred phone bezel (see body.framed)
+   so the site reads as a portrait app instead of a stretched full screen. */
+#device {
+  position: relative;
+  width: 100%; height: 100dvh;
+  overflow: hidden;
+  background: #08090e;
+}
+body.framed {
+  background: radial-gradient(circle at 50% 38%, #16171d, #050506 72%);
+  display: flex; align-items: center; justify-content: center;
+}
+body.framed #device {
+  width: 390px; height: 844px;           /* JS rescales to fit the window */
+  border-radius: 46px;
+  box-shadow: 0 0 0 2px #23252d, 0 0 0 13px #0c0d11, 0 0 0 15px #34363f,
+              0 40px 90px rgba(0,0,0,0.65);
+}
+/* simulated notch / status-bar pill (game UI is inset below it via safeTop) */
+body.framed #device::before {
+  content: ''; position: absolute; left: 50%; top: 0;
+  transform: translateX(-50%);
+  width: 156px; height: 26px; background: #000;
+  border-radius: 0 0 18px 18px; z-index: 30; pointer-events: none;
+}
 #controls {
-  position: fixed;
+  position: absolute;
   left: 0; right: 0; bottom: 0;
   padding-bottom: max(14px, env(safe-area-inset-bottom));
   display: none;
@@ -92,8 +118,9 @@ body.no-relics .acts-left { display: none; }
 </style>
 </head>
 <body>
+<div id="device">
 <canvas id="c"></canvas>
-<div id="safe-probe" style="position:fixed;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;"></div>
+<div id="safe-probe" style="position:absolute;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top);visibility:hidden;"></div>
 <div id="controls">
   <div class="dpad">
     <div></div><div class="dp" id="dp-up" aria-label="Up">&#9650;</div><div></div>
@@ -109,6 +136,7 @@ body.no-relics .acts-left { display: none; }
     <div class="ab" id="btn-undo" aria-label="Undo">UNDO</div>
     <div class="ab" id="btn-reset" aria-label="Reset">RESET</div>
   </div>
+</div>
 </div>
 <script src="js/font.js"></script>
 <script src="js/audio.js"></script>
