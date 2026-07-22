@@ -728,13 +728,14 @@ const ScreenGame = {
 
     for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
       const x = bx + c * T, y = by + r * T, t = st.tiles[r][c];
+      const seed = (r * 92821) ^ (c * 68917);
       if (t === TILE.WALL) {
         const dd = this._doors && this._doors[r + ',' + c];
         if (dd) Art.doorway(ctx, x, y, T, dd.side, dd.type, dd.open);
-        else Art.wall(ctx, x, y, T);
+        else { Art.wall(ctx, x, y, T); if (st.torches && st.torches[r + ',' + c]) Art.torch(ctx, x, y, T, this.t); }
       }
       else if (t === TILE.FLOOR) {
-        Art.floor(ctx, x, y, T);
+        Art.floor(ctx, x, y, T, seed);
         if (this.filled[r + ',' + c]) {
           ctx.save(); ctx.globalAlpha = 0.55;
           Art.blockRaw(ctx, x, y, T, 0.85);

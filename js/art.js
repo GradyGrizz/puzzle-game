@@ -63,31 +63,90 @@ setTheme(id) {
   Object.assign(PAL, PAL_BASE, th.pal);
 },
 
-// ── base tiles (preserved) ────────────────────────────────────
-floor(ctx, x, y, t) {
+// deterministic per-tile hash -> [0,1), so texture is stable frame to frame
+_h(seed, i) { let z = (((seed >>> 0) + i * 374761393) >>> 0); z = ((z ^ (z >>> 13)) * 1274126177) >>> 0; return (z >>> 8) / 16777216; },
+
+// ── base tiles ────────────────────────────────────────────────
+// textured flagstone floor: seams + a few scattered pebbles / hairline
+// cracks (seeded by tile so it doesn't shimmer). `seed` optional.
+floor(ctx, x, y, t, seed) {
   ctx.fillStyle = PAL.fl; ctx.fillRect(x, y, t, t);
+  // bevelled flagstone: light top-left seam, dark bottom-right
   ctx.fillStyle = PAL.flG; ctx.fillRect(x, y, t, 1); ctx.fillRect(x, y, 1, t);
-  const d = Math.floor(t * .22);
-  ctx.fillStyle = PAL.flD;
-  ctx.fillRect(x + d, y + d, 2, 2); ctx.fillRect(x + t - d - 2, y + t - d - 2, 2, 2);
+  ctx.fillStyle = PAL.flD; ctx.fillRect(x, y + t - 1, t, 1); ctx.fillRect(x + t - 1, y, 1, t);
+  const s = (seed == null ? ((x * 131) ^ (y * 57)) : seed) >>> 0;
+  const n = this._h(s, 1);
+  if (n > 0.5) {
+    const px = x + 4 + Math.floor(this._h(s, 2) * (t - 10));
+    const py = y + 4 + Math.floor(this._h(s, 3) * (t - 10));
+    ctx.fillStyle = PAL.flD; ctx.fillRect(px, py, 3, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(px, py, 2, 1);
+    if (n > 0.82) {
+      const qx = x + 4 + Math.floor(this._h(s, 4) * (t - 10));
+      const qy = y + 4 + Math.floor(this._h(s, 5) * (t - 10));
+      ctx.fillStyle = PAL.flD; ctx.fillRect(qx, qy, 2, 2);
+    }
+  } else if (n < 0.13) {
+    const cx = x + 4 + Math.floor(this._h(s, 6) * (t - 9));
+    ctx.fillStyle = PAL.flG;
+    ctx.fillRect(cx, y + 3, 1, Math.floor(t * 0.42));
+    ctx.fillRect(cx + 1, y + 3 + Math.floor(t * 0.3), 1, Math.floor(t * 0.3));
+  }
 },
 
+// chiselled stone wall: running-bond bricks, each bevelled (lit top-left,
+// shadowed bottom-right) for a 2.5D carved look, plus a bottom cast shadow
+// that lifts the wall off the floor.
 wall(ctx, x, y, t) {
-  ctx.fillStyle = PAL.wBg; ctx.fillRect(x, y, t, t);
-  ctx.fillStyle = PAL.wFace; ctx.fillRect(x + 1, y + 1, t - 2, t - 2);
-  const h = Math.floor(t * .52);
-  ctx.fillStyle = PAL.wHi;
-  ctx.fillRect(x + 2, y + 2, t - 4, 2); ctx.fillRect(x + 2, y + h + 1, t - 4, 2);
-  ctx.fillStyle = PAL.wBg;
-  ctx.fillRect(x + 1, y + h, t - 2, 2);
-  ctx.fillRect(x + Math.floor(t * .50), y + 2, 1, h - 3);
-  ctx.fillRect(x + Math.floor(t * .25), y + h + 2, 1, t - h - 4);
-  ctx.fillRect(x + Math.floor(t * .75), y + h + 2, 1, t - h - 4);
-  ctx.fillStyle = PAL.wMid;
-  ctx.fillRect(x + 2, y + 2, Math.floor(t * .20), h - 4);
-  ctx.fillRect(x + Math.floor(t * .27), y + h + 2, Math.floor(t * .20), t - h - 4);
-  ctx.fillStyle = PAL.wSh;
-  ctx.fillRect(x + t - 1, y, 1, t); ctx.fillRect(x, y + t - 1, t, 1);
+  ctx.fillStyle = PAL.wSh; ctx.fillRect(x, y, t, t);        // mortar base
+  const half = Math.floor(t / 2), g = 1;
+  const seedRow = (yy) => ((x * 0) ^ (yy * 2654435761)) >>> 0; // seam continues across tiles
+  const courses = [
+    { by: y + g, bh: half - g, off: 0 },
+    { by: y + half + g, bh: t - half - g, off: half },
+  ];
+  let bi = 0;
+  for (const co of courses) {
+    let bx = x - (co.off ? half : 0);
+    while (bx < x + t) {
+      const rx = Math.max(x, bx + g);
+      const rw = Math.min(x + t, bx + half) - rx;
+      if (rw > 1) {
+        ctx.fillStyle = PAL.wFace; ctx.fillRect(rx, co.by, rw, co.bh);
+        const v = this._h(seedRow(co.by), Math.floor((bx + 999) / half));
+        if (v > 0.62) { ctx.fillStyle = 'rgba(255,255,255,' + ((v - 0.62) * 0.16).toFixed(3) + ')'; ctx.fillRect(rx, co.by, rw, co.bh); }
+        else if (v < 0.42) { ctx.fillStyle = 'rgba(0,0,0,' + ((0.42 - v) * 0.34).toFixed(3) + ')'; ctx.fillRect(rx, co.by, rw, co.bh); }
+        // bevel: light top+left, dark bottom+right
+        ctx.fillStyle = PAL.wHi; ctx.fillRect(rx, co.by, rw, 1); ctx.fillRect(rx, co.by, 1, co.bh);
+        ctx.fillStyle = PAL.wBg; ctx.fillRect(rx, co.by + co.bh - 1, rw, 1); ctx.fillRect(rx + rw - 1, co.by, 1, co.bh);
+        // rare moss / crack
+        if (v > 0.9) { ctx.fillStyle = 'rgba(74,112,58,0.45)'; ctx.fillRect(rx + 1, co.by + co.bh - 2, Math.max(2, rw - 3), 2); }
+      }
+      bx += half; bi++;
+    }
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fillRect(x, y + t - 1, t, 1);   // cast shadow
+},
+
+// wall-mounted torch (drawn over a wall tile); animated flame + warm glow
+torch(ctx, x, y, t, time) {
+  const cx = x + Math.floor(t / 2), by = y + Math.floor(t * 0.6);
+  const tt = (time || 0) * 10;
+  // warm glow pool first (under the flame)
+  ctx.save();
+  ctx.fillStyle = `rgba(240,150,50,${0.12 + 0.04 * Math.sin(tt * 1.3)})`;
+  ctx.beginPath(); ctx.arc(cx, by - t * 0.18, t * 0.85, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // iron sconce
+  ctx.fillStyle = '#26201a'; ctx.fillRect(cx - 3, by, 6, Math.floor(t * 0.28));
+  ctx.fillStyle = '#3c2e1e'; ctx.fillRect(cx - 2, by, 4, Math.floor(t * 0.28));
+  ctx.fillStyle = '#5a4326'; ctx.fillRect(cx - 4, by - 2, 8, 2);
+  // flame
+  const fh = Math.floor(t * (0.32 + 0.07 * Math.sin(tt)));
+  const fw = Math.max(3, Math.floor(t * 0.13));
+  ctx.fillStyle = '#d8641c'; ctx.fillRect(cx - fw, by - fh, fw * 2, fh);
+  ctx.fillStyle = '#f0a828'; ctx.fillRect(cx - fw + 1, by - Math.floor(fh * 0.72), fw * 2 - 2, Math.floor(fh * 0.72));
+  ctx.fillStyle = '#ffe89a'; ctx.fillRect(cx - 1, by - Math.floor(fh * 0.46), Math.max(2, fw - 2), Math.floor(fh * 0.46));
 },
 
 // A flat, recessed floor-plate rather than a tall raised block, so the
@@ -110,20 +169,25 @@ switchTile(ctx, x, y, t, on) {
   if (on) { ctx.fillStyle = 'rgba(255,200,80,0.25)'; ctx.fillRect(ox, oy, s, s); }
 },
 
+// carved push-stone: raised cube with a lit top face, chiselled rune,
+// left light edge + right/bottom shadow, and a cast shadow for depth
 block(ctx, x, y, t, glow) {
-  this.floor(ctx, x, y, t);
-  const p = Math.floor(t * .1), bs = t - p * 2;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + p + 2, y + p + 2, bs, bs);
-  ctx.fillStyle = PAL.blF; ctx.fillRect(x + p, y + p, bs, bs);
+  this.floor(ctx, x, y, t, ((x * 3) ^ (y * 5)));
+  const p = Math.floor(t * .08), bs = t - p * 2;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x + p + 3, y + p + 4, bs, bs); // cast shadow
+  ctx.fillStyle = PAL.blF; ctx.fillRect(x + p, y + p, bs, bs);                    // body
+  // lit top face band + crisp highlight (light from above)
+  ctx.fillStyle = PAL.blH; ctx.fillRect(x + p, y + p, bs, Math.max(3, Math.floor(bs * .2)));
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x + p, y + p, bs, 2);
+  ctx.fillStyle = PAL.blH; ctx.fillRect(x + p, y + p, 3, bs);                      // left light edge
+  // deep right + bottom shadow
+  ctx.fillStyle = PAL.blSh; ctx.fillRect(x + p + bs - 3, y + p, 3, bs); ctx.fillRect(x + p, y + p + bs - 3, bs, 3);
+  // chiselled rune cross
   const m = Math.floor(t / 2);
   ctx.fillStyle = PAL.blSh;
-  ctx.fillRect(x + m - 1, y + p + 3, 2, bs - 6); ctx.fillRect(x + p + 3, y + m - 1, bs - 6, 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(x + m, y + p + 4, 1, bs - 7); ctx.fillRect(x + p + 4, y + m, bs - 7, 1);
-  ctx.fillStyle = PAL.blH;
-  ctx.fillRect(x + p, y + p, bs, 3); ctx.fillRect(x + p, y + p, 3, bs);
-  ctx.fillStyle = PAL.blSh;
-  ctx.fillRect(x + p + bs - 2, y + p, 2, bs); ctx.fillRect(x + p, y + p + bs - 2, bs, 2);
+  ctx.fillRect(x + m - 1, y + p + 5, 2, bs - 10); ctx.fillRect(x + p + 5, y + m - 1, bs - 10, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillRect(x + m, y + p + 6, 1, bs - 12); ctx.fillRect(x + p + 6, y + m, bs - 12, 1);
   if (glow) { ctx.fillStyle = 'rgba(210,80,20,0.28)'; ctx.fillRect(x + p, y + p + bs - 5, bs, 5); }
 },
 

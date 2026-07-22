@@ -23,6 +23,7 @@ function parseLevel(def) {
     coinsGot: 0,
     moves: 0,
     chest: def.chest ? { r: -1, c: -1, item: def.chest.item, opened: false } : null,
+    torches: {},         // "r,c" -> true, wall cells that carry a lit torch
     dark: !!def.dark,
     onCrack: false,      // player currently standing on a crack
     exitOpen: false,
@@ -41,6 +42,7 @@ function parseLevel(def) {
       else if (ch === 'd') t = TILE.DOOR;
       else if (ch === 'u') t = TILE.BUSH;
       else if (ch === 'f') t = TILE.FIRE;
+      else if (ch === 'T') { t = TILE.WALL; st.torches[r + ',' + c] = true; } // torch on a wall
       else if (ch === 'b') { st.blocks.push({ r, c, heavy: false }); }
       else if (ch === 'B') { t = TILE.SWITCH; st.blocks.push({ r, c, heavy: false }); }
       else if (ch === 'h') { st.blocks.push({ r, c, heavy: true }); }
