@@ -15,7 +15,8 @@ const Save = {
   _progressDefaults() {
     return {
       coins: 0,
-      story: { levels: {}, items: {}, equipped: {}, equippedMigrated: true },
+      // dungeons: per-id { done:true }. items/equipped = relics.
+      story: { dungeons: {}, items: {}, equipped: {}, structVer: 2 },
       challenge: { best: 0, runs: [] },
       timed: { bests: [] },
       shop: {
@@ -54,6 +55,9 @@ const Save = {
       this.store.active = 'normal';
       this.store.dev.on = false;
     }
+    // ensure both profiles use the current dungeon story structure
+    this._dungeonMigrate(this.store.profiles.normal);
+    this._dungeonMigrate(this.store.profiles.dev);
     this._assemble();
     this.data.meta.launches++;
     this.write();
@@ -63,16 +67,22 @@ const Save = {
   _migrateV1(raw) {
     const p = this._progressDefaults();
     if (typeof raw.coins === 'number') p.coins = raw.coins;
-    if (raw.story) this._merge(p.story, raw.story);
     if (raw.challenge) this._merge(p.challenge, raw.challenge);
     if (raw.timed) this._merge(p.timed, raw.timed);
     if (raw.shop) this._merge(p.shop, raw.shop);
-    // pre-equip-system saves: auto-equip owned relics so nothing breaks
-    if (!p.story.equippedMigrated) {
-      for (const k in p.story.items) p.story.equipped[k] = true;
-      p.story.equippedMigrated = true;
-    }
+    // the single-room "levels" campaign was replaced by multi-room
+    // dungeons — keep coins/shop but start the story fresh so the new
+    // relic progression (earn each item mid-dungeon) is coherent
     return p;
+  },
+
+  // returning saves from the pre-dungeon structure: reset story only
+  _dungeonMigrate(prog) {
+    if (!prog.story) prog.story = { dungeons: {}, items: {}, equipped: {}, structVer: 2 };
+    if (prog.story.structVer !== 2) {
+      prog.story = { dungeons: {}, items: {}, equipped: {}, structVer: 2 };
+    }
+    if (!prog.story.dungeons) prog.story.dungeons = {};
   },
 
   // build the working `data` view for the active profile (objects shared by
@@ -133,14 +143,13 @@ const Save = {
     this.data.coins = Math.max(0, this.data.coins + n); this.write();
   },
 
-  completeStoryLevel(id, moves, coinsEarned) {
-    const rec = this.data.story.levels[id];
+  // ── dungeon progress ──
+  isDungeonDone(id) { const r = this.data.story.dungeons[id]; return !!(r && r.done); },
+  completeDungeon(id, coinsEarned) {
+    const rec = this.data.story.dungeons[id];
     const first = !rec || !rec.done;
-    this.data.story.levels[id] = {
-      done: true,
-      bestMoves: rec && rec.bestMoves ? Math.min(rec.bestMoves, moves) : moves,
-    };
-    if (!this.devOn()) this.data.coins += coinsEarned;
+    this.data.story.dungeons[id] = { done: true };
+    if (first && !this.devOn()) this.data.coins += coinsEarned;
     this.write();
     return first;
   },
@@ -160,11 +169,6 @@ const Save = {
     if (!this.hasItem(item)) return false;
     this.setEquipped(item, !this.isEquipped(item));
     return this.isEquipped(item);
-  },
-
-  isLevelDone(id) {
-    const rec = this.data.story.levels[id];
-    return !!(rec && rec.done);
   },
 
   // ── shop ──

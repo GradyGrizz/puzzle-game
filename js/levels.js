@@ -1,551 +1,270 @@
 'use strict';
-// ── Story campaign data ───────────────────────────────────────
-// Legend: # wall  . floor  x exit  s switch  c crack  p pit
-//         d door  u bush   f fire  b block  B block-on-switch
-//         h heavy k key    o coin  C chest  @ start
+// ── Story campaign: five multi-room dungeons ──────────────────
+// Each dungeon is a set of rooms on a grid (gx,gy). A room is a normal
+// engine map; the dungeon layer (js/dungeon.js + game.js) handles the
+// room-to-room transitions, a shared key pool, shutter/locked doors and
+// the mid-dungeon relic that gates the path to the boss room.
+//
+// Room map legend (9x7, border is wall; doorways are punched at edge
+// centres by the engine wherever a door is declared):
+//   # wall  . floor  s switch  b block  B block-on-switch  h heavy
+//   u bush  f fire   p pit  c crack  d in-room locked door
+//   k key   o coin   C chest  x exit stairs  @ player start
+//
+// Door types per side: open | shutter (opens when THIS room is solved)
+//   | lock (needs a key). A missing side is solid wall.
 
-const STORY = {
-  title: 'THE SUNKEN KEEP',
-  chapters: [
-    {
-      id: 'ch1',
-      name: 'THE SUNKEN HALLS',
-      tagline: 'EVERY DELVE BEGINS WITH A SINGLE STEP.',
-      levels: [
-        {
-          id: '1-1', name: 'AWAKENING',
-          intro: 'RAIN HAMMERS THE RUINS OF KING ALARIC\'S KEEP. FAR BELOW, THE SUNSTONE STILL BURNS... AND YOU ARE THE ONLY ONE FOOL ENOUGH TO GO GET IT.',
-          hint: 'WALK TO THE STAIRS.',
-          map: [
-            '###########',
-            '#@........#',
-            '#.o.....o.#',
-            '#........x#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-2', name: 'THE FIRST TRIAL',
-          intro: 'THE OLD MASONS SEALED EVERY STAIR BEHIND SWITCHES OF RED STONE. HEAVY THINGS HOLD THEM DOWN. YOU ARE NOT HEAVY ENOUGH.',
-          hint: 'PUSH THE BLOCK ONTO THE RED SWITCH.',
-          map: [
-            '###########',
-            '#....#....#',
-            '#.@.b.s..x#',
-            '#....#....#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-3', name: 'TWIN SEALS',
-          intro: 'TWO SEALS, TWO STONES. THE MASONS WERE FOND OF SYMMETRY. YOU ARE ALREADY FOND OF HATING THEM.',
-          hint: 'BLOCKS ONLY MOVE IF THE SPACE BEHIND THEM IS FREE.',
-          map: [
-            '###########',
-            '#....s....#',
-            '#.b.....b.#',
-            '#@...s...x#',
-            '#.........#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-4', name: 'THIN ICE, OLD STONE',
-          intro: 'THE FLOOR HERE IS ROTTEN. IT WILL HOLD YOUR WEIGHT EXACTLY ONCE. STEP WISELY.',
-          hint: 'CRACKED TILES CRUMBLE AFTER YOU LEAVE THEM.',
-          map: [
-            '###########',
-            '#...#.....#',
-            '#.o.c..@..#',
-            '#...#.....#',
-            '#.o.c.....#',
-            '#...#....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-5', name: 'FILL THE VOID',
-          intro: 'A CHASM SWALLOWED THE EAST HALL LONG AGO. THE MASONS LEFT THEIR STONES BEHIND. MAKE A BRIDGE OF THEM.',
-          hint: 'PUSH A BLOCK INTO A PIT TO FILL IT.',
-          map: [
-            '###########',
-            '#@...p...x#',
-            '#....p....#',
-            '#..b.p....#',
-            '#....p....#',
-            '#..b......#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-6', name: 'THE WARDEN\'S KEY',
-          intro: 'THE DOOR WARDEN DROWNED AT HIS POST THREE HUNDRED YEARS AGO. HIS KEY DID NOT.',
-          hint: 'KEYS OPEN LOCKED DOORS.',
-          map: [
-            '###########',
-            '#@..d....x#',
-            '#...#.....#',
-            '#k..#.....#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-7', name: 'LESSONS COMBINED',
-          intro: 'DEEPER NOW. THE WATER SOUNDS CLOSER. EVERYTHING THE HALLS HAVE TAUGHT YOU, THEY WILL NOW ASK BACK.',
-          hint: null,
-          map: [
-            '###########',
-            '#@..#.....#',
-            '#.k.#..b..#',
-            '#...d..s..#',
-            '#...#.....#',
-            '#...#....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '1-8', name: 'THE ARMORY SEAL',
-          intro: 'BEHIND THIS SEAL LIES THE KEEP\'S OLD ARMORY. SOMETHING OF THE KING\'S GUARD SURVIVED THE FLOOD. IT IS WAITING FOR A NEW HAND.',
-          hint: 'OPEN THE CHEST TO CLAIM WHAT WAITS INSIDE.',
-          map: [
-            '###########',
-            '#.s.#..C..#',
-            '#.b.#.....#',
-            '#@..d.b.b.#',
-            '#...#s..s.#',
-            '#.k.#.....#',
-            '#...#....x#',
-            '###########',
-          ],
-          chest: { item: 'sword' },
-          outro: 'THE BLADE OF THE DROWNED GUARD IS YOURS. ITS EDGE STILL REMEMBERS HOW TO CUT. THE BRAMBLE DEEP LIES AHEAD...',
-        },
-      ],
-    },
-
-    {
-      id: 'ch2',
-      name: 'THE BRAMBLE DEEP',
-      tagline: 'THE ROOTS FOUND THE DARK, AND LIKED IT.',
-      levels: [
-        {
-          id: '2-1', name: 'FIRST CUT',
-          intro: 'BELOW THE HALLS, THE BRAMBLE GREW FAT ON THREE CENTURIES OF SILENCE. YOUR NEW BLADE HUMS. IT REMEMBERS THIS PLACE.',
-          hint: 'WALK INTO A BUSH TO CUT IT WITH YOUR SWORD.',
-          map: [
-            '###########',
-            '#@...u...x#',
-            '#.o..u..o.#',
-            '#....u....#',
-            '###########',
-          ],
-        },
-        {
-          id: '2-2', name: 'OVERGROWN SEALS',
-          intro: 'THE BRAMBLE DOES NOT CARE ABOUT SWITCHES OR SEALS. IT GROWS WHERE IT PLEASES. CLEAR THE WAY.',
-          hint: 'CUT THE BUSH BEFORE PUSHING THE BLOCK THROUGH.',
-          map: [
-            '###########',
-            '#....#....#',
-            '#.@.bu.s.x#',
-            '#.........#',
-            '###########',
-          ],
-        },
-        {
-          id: '2-3', name: 'THE HEDGE MAZE',
-          intro: 'A GARDENER\'S GHOST WOULD WEEP. SOMEWHERE IN THIS TANGLE LIES THE WARDEN\'S SECOND KEY.',
-          hint: null,
-          map: [
-            '###########',
-            '#@.u...u.o#',
-            '#.#.#.#.#.#',
-            '#ou..k..uo#',
-            '#.#.#.#.#.#',
-            '#..u.d.u.x#',
-            '###########',
-          ],
-        },
-        {
-          id: '2-4', name: 'THORNS AND STONE',
-          intro: 'STONE REMEMBERS ORDERS. BRAMBLE TAKES NONE. BETWEEN THE TWO OF THEM, ONLY YOU CAN CHOOSE A PATH.',
-          hint: null,
-          map: [
-            '###########',
-            '#.s.#..o..#',
-            '#.b.#.....#',
-            '#@u....b.s#',
-            '#...#..c..#',
-            '#.o.#....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '2-5', name: 'THE CHOKED CISTERN',
-          intro: 'THE CISTERN DRANK THE FLOOD AND KEPT DRINKING. NOW ONLY ITS THROAT REMAINS, BLACK AND BOTTOMLESS.',
-          hint: null,
-          map: [
-            '###########',
-            '#@..p.....#',
-            '#.b.p..o..#',
-            '#...p.....#',
-            '#.b.pu...x#',
-            '#....u..o.#',
-            '###########',
-          ],
-        },
-        {
-          id: '2-6', name: 'HEART OF THE BRAMBLE',
-          intro: 'AT THE BRAMBLE\'S HEART, THE VINES PART AROUND A SINGLE CHEST, UNTOUCHED. THE ROOTS FEAR WHAT SLEEPS INSIDE IT.',
-          hint: null,
-          map: [
-            '###########',
-            '#.k.#..C..#',
-            '#.u.#.s.s.#',
-            '#@..d.b.b.#',
-            '#...#.u...#',
-            '#.o.#....x#',
-            '###########',
-          ],
-          chest: { item: 'shield' },
-          outro: 'THE WARDEN\'S SHIELD, BRIGHT AS THE DAY IT SANK. THROUGH ITS METAL YOU FEEL A DISTANT HEAT... THE GALLERIES BELOW ARE BURNING.',
-        },
-      ],
-    },
-
-    {
-      id: 'ch3',
-      name: 'THE ASHEN GALLERIES',
-      tagline: 'THE FLOOD NEVER REACHED HERE. SOMETHING ELSE DID.',
-      levels: [
-        {
-          id: '3-1', name: 'TRIAL BY FIRE',
-          intro: 'GAS FROM THE DEEP VENTS BURNS WHERE IT LEAKS. THE OLD GALLERIES HAVE BEEN ALIGHT FOR A HUNDRED YEARS. RAISE YOUR SHIELD.',
-          hint: 'YOUR SHIELD LETS YOU WALK THROUGH FLAMES.',
-          map: [
-            '###########',
-            '#@...f...x#',
-            '#.o..f..o.#',
-            '#....f....#',
-            '###########',
-          ],
-        },
-        {
-          id: '3-2', name: 'SMOTHER THE FLAME',
-          intro: 'FIRE NEEDS AIR. A MASON\'S BLOCK NEEDS NOTHING AT ALL. LET THEM ARGUE IT OUT.',
-          hint: 'PUSH A BLOCK ONTO A FLAME TO SNUFF IT.',
-          map: [
-            '###########',
-            '#....#....#',
-            '#.@.b.fs.x#',
-            '#....#....#',
-            '###########',
-          ],
-        },
-        {
-          id: '3-3', name: 'THE SCORCHED CROSSING',
-          intro: 'THE GALLERY FLOOR IS HALF ASH, HALF MEMORY. CHOOSE WHICH HALF HOLDS YOU.',
-          hint: null,
-          map: [
-            '###########',
-            '#@..f...o.#',
-            '#.#.f.###.#',
-            '#...f...s.#',
-            '#.b.f..b..#',
-            '#...c....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '3-4', name: 'GALLERY OF EMBERS',
-          intro: 'TWO SEALS STAND IN A HALL OF STANDING FLAME. THE SHIELD GROWS WARM, THEN PROUD.',
-          hint: 'YOU CAN STAND IN FLAMES AND WORK.',
-          map: [
-            '###########',
-            '#.s.#.s...#',
-            '#.b.#.b...#',
-            '#@f...f..x#',
-            '###########',
-          ],
-        },
-        {
-          id: '3-5', name: 'THE FURNACE GATE',
-          intro: 'THE GATE AHEAD FED THE KEEP\'S FORGES. ITS KEY HANGS WHERE NO BARE-HANDED THIEF WOULD EVER REACH.',
-          hint: null,
-          map: [
-            '###########',
-            '#.k.#..o..#',
-            '#.f.#.f.f.#',
-            '#@..d.b..x#',
-            '#...#.f.s.#',
-            '###########',
-          ],
-        },
-        {
-          id: '3-6', name: 'HEART OF ASH',
-          intro: 'IN THE DEEPEST GALLERY, THE FLAMES BOW AROUND AN IRON CHEST. WHATEVER WAITS INSIDE HAS NEVER FEARED THE HEAT.',
-          hint: null,
-          map: [
-            '###########',
-            '#.s.#.C.f.#',
-            '#.b.#...f.#',
-            '#@f.d.bff.#',
-            '#.k.#.s..x#',
-            '###########',
-          ],
-          chest: { item: 'glove' },
-          outro: 'THE TITAN GLOVE SWALLOWS YOUR HAND TO THE ELBOW. YOU FLEX, AND SOMEWHERE BELOW, IRON GROANS IN ITS SLEEP.',
-        },
-      ],
-    },
-
-    {
-      id: 'ch4',
-      name: 'THE IRON VAULTS',
-      tagline: 'WHAT THE KING VALUED, HE MADE TOO HEAVY TO STEAL.',
-      levels: [
-        {
-          id: '4-1', name: 'WEIGHT OF AGES',
-          intro: 'THE VAULT BLOCKS ARE SOLID IRON. YESTERDAY YOU COULD NOT HAVE ROCKED ONE. TODAY IT SLIDES LIKE A CHILD\'S TOY.',
-          hint: 'THE TITAN GLOVE PUSHES DARK IRON BLOCKS.',
-          map: [
-            '###########',
-            '#@..h..s.x#',
-            '#.o.......#',
-            '###########',
-          ],
-        },
-        {
-          id: '4-2', name: 'IRON AND STONE',
-          intro: 'STONE AND IRON, SIDE BY SIDE. THE MASONS AND THE SMITHS NEVER AGREED ON ANYTHING EXCEPT SEALS.',
-          hint: null,
-          map: [
-            '###########',
-            '#....s....#',
-            '#.b.....h.#',
-            '#@...s...x#',
-            '#.........#',
-            '###########',
-          ],
-        },
-        {
-          id: '4-3', name: 'THE COUNTERWEIGHT',
-          intro: 'THE VAULT FLOOR GAVE WAY A CENTURY AGO. IRON SINKS. USE THAT.',
-          hint: null,
-          map: [
-            '###########',
-            '#@...p...x#',
-            '#..h.p....#',
-            '#....p.o..#',
-            '#..b.p....#',
-            '###########',
-          ],
-        },
-        {
-          id: '4-4', name: 'VAULT OF SEALS',
-          intro: 'THREE SEALS GUARD THE INNER VAULTS. THE KEY IS WHERE KEYS ALWAYS ARE: EXACTLY WHERE YOU LEAST WANT TO GO.',
-          hint: null,
-          map: [
-            '###########',
-            '#.s.#.s.s.#',
-            '#.h.#.b.h.#',
-            '#@..d.....#',
-            '#.k.#..f..#',
-            '#...#....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '4-5', name: 'THE CRUSHING DEPTH',
-          intro: 'THE DEEPEST VAULT HOLDS NOTHING BUT ITS OWN LOCKS. THE KING KEPT IT THAT WAY TO TRAIN HIS GUARD. TRAIN.',
-          hint: null,
-          map: [
-            '###########',
-            '#....s....#',
-            '#.h.....h.#',
-            '#@...s....#',
-            '#.h.......#',
-            '#....s...x#',
-            '###########',
-          ],
-        },
-        {
-          id: '4-6', name: 'THE VAULT DOOR',
-          intro: 'PAST THE LAST DOOR, A CHEST OF PALE WOOD SITS ALONE IN THE DARK. THE DARK SEEMS... THICKER, DOWN HERE.',
-          hint: null,
-          map: [
-            '###########',
-            '#.s.#..C..#',
-            '#.h.#.....#',
-            '#@..d.h.b.#',
-            '#.k.#s..s.#',
-            '#....#...x#',
-            '###########',
-          ],
-          chest: { item: 'lantern' },
-          outro: 'THE PALE LANTERN LIGHTS WITHOUT FLAME OR OIL. BELOW THE VAULTS THERE ARE NO TORCHES LEFT. THERE IS ONLY WHAT YOU CARRY.',
-        },
-      ],
-    },
-
-    {
-      id: 'ch5',
-      name: 'THE LIGHTLESS DEEP',
-      tagline: 'THE SUNSTONE WAITS WHERE NO SUN HAS EVER BEEN.',
-      levels: [
-        {
-          id: '5-1', name: 'INTO THE DARK',
-          intro: 'THE STAIRS END. THE MAPS END. THE LANTERN\'S CIRCLE IS THE WHOLE WORLD NOW, AND YOU MUST WALK IT FORWARD.',
-          hint: 'THE LANTERN LIGHTS YOUR WAY. GO SLOW.',
-          dark: true,
-          map: [
-            '###########',
-            '#@...#..o.#',
-            '#.o.##...##',
-            '#....#.o..#',
-            '##.......x#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-2', name: 'SHADOWED SEALS',
-          intro: 'SEALS, AGAIN. BUT DOWN HERE YOU CANNOT SEE THE WHOLE PUZZLE AT ONCE. HOLD IT IN YOUR MIND, DELVER.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#....s....#',
-            '#.b.....b.#',
-            '#@...s...x#',
-            '#.........#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-3', name: 'THE BLIND CROSSING',
-          intro: 'THE FLOOR AHEAD IS A LIAR. SOME OF IT IS FLOOR. LISTEN TO IT CRACK.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#@...c....#',
-            '#.b..c.p..#',
-            '#....c.p.x#',
-            '#..o.c....#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-4', name: 'EMBERS IN THE GLOOM',
-          intro: 'FIRELIGHT, AT LAST - BUT IT IS NOT FRIENDLY FIRE. NOTHING DOWN HERE IS FRIENDLY. IT IS ONLY VISIBLE.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#.s.f...s.#',
-            '#.b.#.#.b.#',
-            '#@..f.f...#',
-            '#....x....#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-5', name: 'THE DROWNED ARMORY',
-          intro: 'RUSTED RACKS, EMPTY SCABBARDS. THE KING\'S LAST GUARD LEFT EVERYTHING AND WALKED INTO THE DEEP. YOU ARE FOLLOWING THEIR FOOTPRINTS.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#.k.#..s..#',
-            '#.u.#..h..#',
-            '#@..d.....#',
-            '#.o.#..b.s#',
-            '#...#....x#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-6', name: 'GAUNTLET OF THE KEEP',
-          intro: 'THE LAST HALL BEFORE THE HEART. EVERY TRICK THE KEEP KNOWS, IT SPENDS HERE. SPEND YOURS.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#@.c#..f..#',
-            '#.b.#.b.h.#',
-            '#...d..s.s#',
-            '#.s.#.....#',
-            '#.k.#.o..x#',
-            '###########',
-          ],
-        },
-        {
-          id: '5-7', name: 'THE SUNSTONE',
-          intro: 'A ROUND CHAMBER. A PEDESTAL. A CHEST OF GOLD AND GLASS, GLOWING FROM WITHIN LIKE A SECOND DAWN. REACH IT, DELVER, AND FINISH THIS.',
-          hint: null,
-          dark: true,
-          map: [
-            '###########',
-            '#....C....#',
-            '#.f.h.h.f.#',
-            '#..s...s..#',
-            '#@.b...b..#',
-            '#....o....#',
-            '#....x....#',
-            '###########',
-          ],
-          chest: { item: 'sunstone' },
-          outro: 'THE SUNSTONE RISES INTO YOUR HANDS, WARM AS A SUMMER YOU NEVER LIVED TO SEE. ABOVE YOU, STONE BY STONE, THE SUNKEN KEEP BEGINS TO GLOW. THE DELVE IS COMPLETE. THE KEEP REMEMBERS ITS KING - AND NOW IT WILL REMEMBER YOU.',
-        },
-      ],
-    },
-  ],
-};
-
-// item metadata for chests / inventory
 const ITEMS = {
-  sword:    { name: 'GUARD\'S BLADE',   desc: 'CUTS THROUGH BUSHES AND BRAMBLE.' },
-  shield:   { name: 'WARDEN\'S SHIELD', desc: 'WALK UNBURNED THROUGH FLAMES.' },
-  glove:    { name: 'TITAN GLOVE',      desc: 'PUSHES HEAVY IRON BLOCKS.' },
-  lantern:  { name: 'PALE LANTERN',     desc: 'LIGHTS THE DARKEST VAULTS.' },
-  sunstone: { name: 'SUNSTONE',         desc: 'THE HEART OF THE KEEP, ABLAZE ONCE MORE.' },
+  sword:    { name: "GUARD'S BLADE",   desc: 'CUTS THROUGH BUSHES AND BRAMBLE.' },
+  shield:   { name: "WARDEN'S SHIELD", desc: 'WALK UNBURNED THROUGH FLAMES.' },
+  glove:    { name: 'TITAN GLOVE',     desc: 'PUSHES HEAVY IRON BLOCKS.' },
+  lantern:  { name: 'PALE LANTERN',    desc: 'LIGHTS THE DARKEST VAULTS.' },
+  boots:    { name: 'STRIDER BOOTS',   desc: 'STRIDE ACROSS OPEN CHASMS.' },
+  sunstone: { name: 'SUNSTONE',        desc: 'THE HEART OF THE KEEP, ABLAZE ONCE MORE.' },
 };
 
-function getStoryLevel(id) {
-  for (const ch of STORY.chapters)
-    for (const lv of ch.levels)
-      if (lv.id === id) return { chapter: ch, level: lv };
-  return null;
+// short room builders keep the data readable
+function R(gx, gy, map, doors, extra) {
+  return Object.assign({ gx, gy, map, doors: doors || {} }, extra || {});
 }
 
-// linear ordering across chapters
-function allStoryLevels() {
-  const out = [];
-  for (const ch of STORY.chapters) for (const lv of ch.levels) out.push(lv);
-  return out;
-}
+const DUNGEONS = [
+  // ══ D1 · THE SUNKEN HALLS · grants SWORD, bushes gate the boss ══
+  {
+    id: 'd1', name: 'THE SUNKEN HALLS',
+    tagline: 'EVERY DELVE BEGINS WITH A SINGLE STEP.',
+    item: 'sword', prior: [],
+    start: { room: 'r1', r: 3, c: 2 }, goal: 'r10',
+    intro: "RAIN HAMMERS THE RUINS OF KING ALARIC'S KEEP. FAR BELOW, THE SUNSTONE STILL BURNS. YOU ARE THE ONLY ONE FOOL ENOUGH TO GO GET IT.",
+    outro: 'THE DROWNED GUARD\'S BLADE IS YOURS, AND THE FIRST HALL LIES CONQUERED BEHIND YOU.',
+    rooms: {
+      r1: R(0, 3, [
+        '#########',
+        '#.......#',
+        '#.o...o.#',
+        '#.@.....#',
+        '#.......#',
+        '#.o...o.#',
+        '#########',
+      ], { e: 'open' }, { intro: 'THE HALLS REMEMBER FOOTSTEPS. WALK EAST.' }),
+      r2: R(1, 3, [
+        '#########',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { w: 'open', e: 'lock', n: 'open' }, { intro: 'THE EAST DOOR IS LOCKED. A KEY MUST BE NEAR.' }),
+      rK: R(1, 2, [
+        '#########',
+        '#.......#',
+        '#...k...#',
+        '#.......#',
+        '#..o.o..#',
+        '#.......#',
+        '#########',
+      ], { s: 'open' }),
+      r3: R(2, 3, [
+        '#########',
+        '#.......#',
+        '#..o.o..#',
+        '#.......#',
+        '#..o.o..#',
+        '#.......#',
+        '#########',
+      ], { w: 'open', e: 'open' }),
+      r4: R(3, 3, [
+        '#########',
+        '#..s.s..#',
+        '#.......#',
+        '#..b.b..#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { w: 'open', n: 'shutter' }, { intro: 'PUSH BOTH STONES ONTO THE SEALS TO OPEN THE WAY.' }),
+      r5: R(3, 2, [
+        '#########',
+        '#.s...s.#',
+        '#.......#',
+        '#.b...b.#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { s: 'open', n: 'shutter' }),
+      r6: R(3, 1, [
+        '#########',
+        '#.ss.ss.#',
+        '#.bb.bb.#',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { s: 'open', n: 'shutter' }),
+      r7: R(3, 0, [
+        '#########',
+        '#.......#',
+        '#...C...#',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { s: 'open', e: 'open' }, { chest: { item: 'sword' } }),
+      r8: R(4, 0, [
+        '#########',
+        '#.......#',
+        '#.......#',
+        '#.......#',
+        '#uuuuuuu#',
+        '#.......#',
+        '#########',
+      ], { w: 'open', s: 'open' }, { intro: 'BRAMBLE BARS THE WAY. YOUR NEW BLADE HUNGERS.' }),
+      r9: R(4, 1, [
+        '#########',
+        '#.......#',
+        '#.u...u.#',
+        '#.......#',
+        '#.u...u.#',
+        '#.......#',
+        '#########',
+      ], { n: 'open', s: 'open' }),
+      r10: R(4, 2, [
+        '#########',
+        '#.......#',
+        '#.......#',
+        '#...x...#',
+        '#.......#',
+        '#.......#',
+        '#########',
+      ], { n: 'open' }, { boss: true }),
+    },
+  },
 
-function nextStoryLevel(id) {
-  const all = allStoryLevels();
-  const i = all.findIndex(l => l.id === id);
-  return i >= 0 && i < all.length - 1 ? all[i + 1] : null;
-}
+  // ══ D2 · THE ASHEN GALLERIES · grants SHIELD, fire gates the boss ══
+  {
+    id: 'd2', name: 'THE ASHEN GALLERIES',
+    tagline: 'THE FLOOD NEVER REACHED HERE. FIRE DID.',
+    item: 'shield', prior: ['sword'],
+    start: { room: 'r1', r: 3, c: 2 }, goal: 'r10',
+    intro: 'GAS FROM THE DEEP VENTS HAS KEPT THESE GALLERIES ALIGHT FOR A HUNDRED YEARS. THE HEAT LEANS AGAINST THE DOORS.',
+    outro: 'THE WARDEN\'S SHIELD HUMS WITH BANKED HEAT. THE GALLERIES ARE ASHES BEHIND YOU.',
+    rooms: {
+      r1: R(0, 3, ['#########', '#.......#', '#.o...o.#', '#.@.....#', '#.......#', '#.o...o.#', '#########'], { e: 'open' },
+        { intro: 'EMBER-LIGHT FLICKERS DOWN THE EAST HALL.' }),
+      r2: R(1, 3, ['#########', '#.......#', '#.......#', '#.......#', '#.......#', '#.......#', '#########'], { w: 'open', e: 'lock', n: 'open' }),
+      rK: R(1, 2, ['#########', '#.......#', '#...k...#', '#.......#', '#..o.o..#', '#.......#', '#########'], { s: 'open' }),
+      r3: R(2, 3, ['#########', '#.......#', '#.......#', '#uuuuuuu#', '#.......#', '#..o.o..#', '#########'], { w: 'open', e: 'open' },
+        { intro: 'BRAMBLE STILL GROWS IN THE ASH. CUT IT DOWN.' }),
+      r4: R(3, 3, ['#########', '#..s.s..#', '#.......#', '#..b.b..#', '#.......#', '#.......#', '#########'], { w: 'open', n: 'shutter' }),
+      r5: R(3, 2, ['#########', '#.s...s.#', '#.......#', '#.b...b.#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r6: R(3, 1, ['#########', '#.ss.ss.#', '#.bb.bb.#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r7: R(3, 0, ['#########', '#.......#', '#...C...#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', e: 'open' },
+        { chest: { item: 'shield' } }),
+      r8: R(4, 0, ['#########', '#.......#', '#.......#', '#.......#', '#fffffff#', '#.......#', '#########'], { w: 'open', s: 'open' },
+        { intro: 'A WALL OF FLAME. RAISE THE SHIELD AND WALK ON.' }),
+      r9: R(4, 1, ['#########', '#.......#', '#.f...f.#', '#.......#', '#.f...f.#', '#.......#', '#########'], { n: 'open', s: 'open' }),
+      r10: R(4, 2, ['#########', '#.......#', '#.......#', '#...x...#', '#.......#', '#.......#', '#########'], { n: 'open' }, { boss: true }),
+    },
+  },
 
-// a story level is unlocked if it's the first, or the previous is done
-function isLevelUnlocked(id, save) {
-  if (save.devOn && save.devOn()) return true;   // dev mode: no level locks
-  const all = allStoryLevels();
-  const i = all.findIndex(l => l.id === id);
+  // ══ D3 · THE IRON VAULTS · grants GLOVE, a heavy seal gates the boss ══
+  {
+    id: 'd3', name: 'THE IRON VAULTS',
+    tagline: 'WHAT THE KING VALUED, HE MADE TOO HEAVY TO STEAL.',
+    item: 'glove', prior: ['sword', 'shield'],
+    start: { room: 'r1', r: 3, c: 2 }, goal: 'r10',
+    intro: 'THE VAULTS ARE IRON TO THE CORE. NOTHING HERE MOVES FOR A BARE HAND.',
+    outro: 'THE TITAN GLOVE SWALLOWS YOUR ARM TO THE ELBOW. IRON GROANS AND OBEYS.',
+    rooms: {
+      r1: R(0, 3, ['#########', '#.......#', '#.o...o.#', '#.@.....#', '#.......#', '#.o...o.#', '#########'], { e: 'open' }),
+      r2: R(1, 3, ['#########', '#.......#', '#.......#', '#.......#', '#.......#', '#.......#', '#########'], { w: 'open', e: 'lock', n: 'open' }),
+      rK: R(1, 2, ['#########', '#.......#', '#...k...#', '#.......#', '#..o.o..#', '#.......#', '#########'], { s: 'open' }),
+      r3: R(2, 3, ['#########', '#.......#', '#.......#', '#uuuuuuu#', '#.......#', '#..o.o..#', '#########'], { w: 'open', e: 'open' }),
+      r4: R(3, 3, ['#########', '#..s.s..#', '#.......#', '#..b.b..#', '#.......#', '#.......#', '#########'], { w: 'open', n: 'shutter' }),
+      r5: R(3, 2, ['#########', '#.ss.ss.#', '#.bb.bb.#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r6: R(3, 1, ['#########', '#.ss.ss.#', '#.bb.bb.#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r7: R(3, 0, ['#########', '#.......#', '#...C...#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', e: 'open' },
+        { chest: { item: 'glove' } }),
+      r8: R(4, 0, ['#########', '#...s...#', '#.......#', '#...h...#', '#.......#', '#.......#', '#########'], { w: 'open', s: 'shutter' },
+        { intro: 'THE SEAL WANTS IRON. ONLY THE GLOVE CAN GIVE IT.' }),
+      r9: R(4, 1, ['#########', '#.......#', '#..o.o..#', '#.......#', '#..o.o..#', '#.......#', '#########'], { n: 'open', s: 'open' }),
+      r10: R(4, 2, ['#########', '#.......#', '#.......#', '#...x...#', '#.......#', '#.......#', '#########'], { n: 'open' }, { boss: true }),
+    },
+  },
+
+  // ══ D4 · THE LIGHTLESS DEEP · grants LANTERN, darkness veils the boss ══
+  {
+    id: 'd4', name: 'THE LIGHTLESS DEEP',
+    tagline: 'THE SUN HAS NEVER ONCE TOUCHED THIS PLACE.',
+    item: 'lantern', prior: ['sword', 'shield', 'glove'],
+    start: { room: 'r1', r: 3, c: 2 }, goal: 'r10',
+    intro: 'THE TORCHES END HERE. WHAT LIES DEEPER HAS NEVER BEEN SEEN, ONLY FELT.',
+    outro: 'THE PALE LANTERN BURNS WITHOUT OIL OR FLAME. THE DARK PEELS BACK, AND YOU WALK ON.',
+    rooms: {
+      r1: R(0, 3, ['#########', '#.......#', '#.o...o.#', '#.@.....#', '#.......#', '#.o...o.#', '#########'], { e: 'open' }),
+      r2: R(1, 3, ['#########', '#.......#', '#.......#', '#.......#', '#.......#', '#.......#', '#########'], { w: 'open', e: 'lock', n: 'open' }),
+      rK: R(1, 2, ['#########', '#.......#', '#...k...#', '#.......#', '#..o.o..#', '#.......#', '#########'], { s: 'open' }),
+      r3: R(2, 3, ['#########', '#.......#', '#.......#', '#uuuuuuu#', '#.......#', '#..o.o..#', '#########'], { w: 'open', e: 'open' }),
+      r4: R(3, 3, ['#########', '#..s.s..#', '#.......#', '#..b.b..#', '#.......#', '#.......#', '#########'], { w: 'open', n: 'shutter' }),
+      r5: R(3, 2, ['#########', '#.s...s.#', '#.......#', '#.b...b.#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r6: R(3, 1, ['#########', '#.ss.ss.#', '#.bb.bb.#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r7: R(3, 0, ['#########', '#.......#', '#...C...#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', e: 'open' },
+        { chest: { item: 'lantern' } }),
+      r8: R(4, 0, ['#########', '#..s.s..#', '#.......#', '#..b.b..#', '#.......#', '#.......#', '#########'], { w: 'open', s: 'shutter' },
+        { dark: true, intro: 'PITCH BLACK. THE LANTERN\'S CIRCLE IS THE WHOLE WORLD NOW.' }),
+      r9: R(4, 1, ['#########', '#.......#', '#.o...o.#', '#.......#', '#.o...o.#', '#.......#', '#########'], { n: 'open', s: 'open' }, { dark: true }),
+      r10: R(4, 2, ['#########', '#.......#', '#.......#', '#...x...#', '#.......#', '#.......#', '#########'], { n: 'open' }, { boss: true, dark: true }),
+    },
+  },
+
+  // ══ D5 · THE ABYSSAL DESCENT · grants BOOTS, chasms gate the SUNSTONE ══
+  {
+    id: 'd5', name: 'THE ABYSSAL DESCENT',
+    tagline: 'THE SUNSTONE WAITS WHERE THE FLOOR RUNS OUT.',
+    item: 'boots', prior: ['sword', 'shield', 'glove', 'lantern'],
+    start: { room: 'r1', r: 3, c: 2 }, goal: 'r10',
+    intro: 'THE KEEP\'S HEART LIES BELOW A THROAT OF CHASMS. ONE MISSTEP IS A LONG WAY DOWN.',
+    outro: 'THE SUNSTONE RISES INTO YOUR HANDS, WARM AS A SUMMER YOU NEVER LIVED TO SEE. STONE BY STONE, THE KEEP BEGINS TO GLOW. THE DELVE IS COMPLETE.',
+    rooms: {
+      r1: R(0, 3, ['#########', '#.......#', '#.o...o.#', '#.@.....#', '#.......#', '#.o...o.#', '#########'], { e: 'open' }),
+      r2: R(1, 3, ['#########', '#.......#', '#.......#', '#.......#', '#.......#', '#.......#', '#########'], { w: 'open', e: 'lock', n: 'open' }),
+      rK: R(1, 2, ['#########', '#.......#', '#...k...#', '#.......#', '#..o.o..#', '#.......#', '#########'], { s: 'open' }),
+      r3: R(2, 3, ['#########', '#.......#', '#.b.p...#', '#.......#', '#...p.b.#', '#.......#', '#########'], { w: 'open', e: 'open' },
+        { intro: 'MIND THE CHASMS. STONE FILLS THEM, IF YOU HAVE STONE TO SPARE.' }),
+      r4: R(3, 3, ['#########', '#..s.s..#', '#.......#', '#..b.b..#', '#.......#', '#.......#', '#########'], { w: 'open', n: 'shutter' }),
+      r5: R(3, 2, ['#########', '#.s...s.#', '#.......#', '#.b...b.#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r6: R(3, 1, ['#########', '#.ss.ss.#', '#.bb.bb.#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', n: 'shutter' }),
+      r7: R(3, 0, ['#########', '#.......#', '#...C...#', '#.......#', '#.......#', '#.......#', '#########'], { s: 'open', e: 'open' },
+        { chest: { item: 'boots' } }),
+      r8: R(4, 0, ['#########', '#.......#', '#.......#', '#.......#', '#ppppppp#', '#.......#', '#########'], { w: 'open', s: 'open' },
+        { intro: 'A CHASM WITHOUT A BRIDGE. THE STRIDER BOOTS WILL CARRY YOU.' }),
+      r9: R(4, 1, ['#########', '#.......#', '#.p...p.#', '#.......#', '#.p...p.#', '#.......#', '#########'], { n: 'open', s: 'open' }),
+      r10: R(4, 2, ['#########', '#.......#', '#...C...#', '#.......#', '#...x...#', '#.......#', '#########'], { n: 'open' },
+        { boss: true, chest: { item: 'sunstone' } }),
+    },
+  },
+];
+
+// ── helpers ───────────────────────────────────────────────────
+function allDungeons() { return DUNGEONS; }
+function getDungeon(id) { return DUNGEONS.find(d => d.id === id) || null; }
+function dungeonIndex(id) { return DUNGEONS.findIndex(d => d.id === id); }
+function nextDungeon(id) { const i = dungeonIndex(id); return i >= 0 && i < DUNGEONS.length - 1 ? DUNGEONS[i + 1] : null; }
+function isDungeonUnlocked(id, save) {
+  if (save.devOn && save.devOn()) return true;
+  const i = dungeonIndex(id);
   if (i <= 0) return true;
-  return save.isLevelDone(all[i - 1].id);
+  return save.isDungeonDone(DUNGEONS[i - 1].id);
 }
-
-function chapterProgress(ch, save) {
-  let done = 0;
-  for (const lv of ch.levels) if (save.isLevelDone(lv.id)) done++;
-  return { done, total: ch.levels.length };
-}
+// count the linear "distance" of the item room for the 70%-through feel
+function roomCount(dun) { return Object.keys(dun.rooms).length; }
 
 if (typeof module !== 'undefined') {
-  module.exports = { STORY, ITEMS, getStoryLevel, allStoryLevels, nextStoryLevel };
+  module.exports = { DUNGEONS, ITEMS, allDungeons, getDungeon, nextDungeon, isDungeonUnlocked, roomCount };
+}
+if (typeof window !== 'undefined') {
+  window.DUNGEONS = DUNGEONS; window.ITEMS = ITEMS;
+  window.allDungeons = allDungeons; window.getDungeon = getDungeon;
+  window.nextDungeon = nextDungeon; window.isDungeonUnlocked = isDungeonUnlocked;
+  window.roomCount = roomCount;
 }

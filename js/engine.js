@@ -111,7 +111,12 @@ function move(prev, dc, dr, inventory) {
     return { ok: true, events: ev, state: st };
   }
 
-  if (t === TILE.WALL || t === TILE.PIT) return blocked(prev, st, ev);
+  if (t === TILE.WALL) return blocked(prev, st, ev);
+  if (t === TILE.PIT && !inv.boots) {
+    // striders can walk across chasms; everyone else falls back
+    if (st.tiles[nr][nc] === TILE.PIT) { ev.push({ type: 'needItem', item: 'boots' }); }
+    return blocked(prev, st, ev, true);
+  }
 
   if (t === TILE.DOOR) {
     if (st.keys > 0) {
@@ -233,6 +238,42 @@ function solve(def, inventory, maxNodes) {
   return solveFrom(parseLevel(def), inventory, maxNodes);
 }
 
+// BFS toward an arbitrary goal predicate over the state (dungeon-room
+// verification: e.g. all switches covered, or the player reaching a cell).
+function solveGoal(startState, inventory, goalFn, maxNodes) {
+  const start = cloneState(startState);
+  if (goalFn(start)) return { solvable: true, moves: 0, path: [] };
+  const seen = new Set([stateKey(start)]);
+  let frontier = [{ st: start, path: [] }];
+  const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  let nodes = 0, depth = 0;
+  const cap = maxNodes || 400000;
+  while (frontier.length) {
+    const next = [];
+    depth++;
+    for (const { st, path } of frontier) {
+      for (const [dc, dr] of dirs) {
+        const res = move(st, dc, dr, inventory);
+        if (!res.ok) continue;
+        const np = path.concat([[dc, dr]]);
+        if (goalFn(res.state)) return { solvable: true, moves: depth, nodes, path: np };
+        const k = stateKey(res.state);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push({ st: res.state, path: np });
+        if (++nodes > cap) return { solvable: false, reason: 'node-cap', nodes };
+      }
+    }
+    frontier = next;
+  }
+  return { solvable: false, reason: 'exhausted', nodes };
+}
+
+// player can reach a given cell (used to verify door/room reachability)
+function canReachCell(startState, inventory, r, c, maxNodes) {
+  return solveGoal(startState, inventory, st => st.player.r === r && st.player.c === c, maxNodes);
+}
+
 // BFS from an arbitrary mid-level state (powers hints + tests)
 function solveFrom(startState, inventory, maxNodes) {
   const start = cloneState(startState);
@@ -264,5 +305,8 @@ function solveFrom(startState, inventory, maxNodes) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { TILE, parseLevel, move, solve, solveFrom, stateKey, blockAt, cloneState };
+  module.exports = { TILE, parseLevel, move, solve, solveFrom, solveGoal, canReachCell, switchesDone, stateKey, blockAt, cloneState };
+}
+if (typeof window !== 'undefined') {
+  window.Engine = { TILE, parseLevel, move, solve, solveFrom, solveGoal, canReachCell, switchesDone, stateKey, blockAt, cloneState };
 }

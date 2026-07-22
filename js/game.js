@@ -15,14 +15,28 @@ const ScreenGame = {
   enter(params) {
     this.gameMode = params.gameMode || 'story';
     this.run = params.run || null;
+    this.dungeon = null;
 
     if (this.gameMode === 'story') {
-      const found = getStoryLevel(params.levelId);
-      this.chapter = found.chapter;
-      this.lv = found.level;
-      this.levelId = this.lv.id;
-      this.firstTime = !Save.isLevelDone(this.levelId);
+      // multi-room dungeon
+      this.dungeon = getDungeon(params.dungeonId);
+      this.firstTime = !Save.isDungeonDone(this.dungeon.id);
       this.budget = 0;
+      this.rooms = {};             // persistent per-room engine states
+      this.dkeys = 0;              // shared key pool
+      this.unlocked = {};          // "roomId:side" opened lock-doors
+      this.visited = {};           // rooms seen (for the map)
+      this._introSeen = {};
+      this.introShown = false;
+      this.roomTrans = null;
+      this._initStoryFields();
+      this._loadRoom(this.dungeon.start.room, null, this.dungeon.start);
+      // dungeon-level intro on the very first room
+      if (this.firstTime && this.dungeon.intro) {
+        this.showDialog(this.dungeon.intro, () => this._maybeRoomIntro());
+        this.introShown = true;
+      }
+      return;
     } else if (this.gameMode === 'challenge') {
       let g = App.pregen && App.pregen.depth === this.run.depth && App.pregen.seed === this.run.seed
         ? App.pregen.gen : genLevel(this.run.depth, this.run.seed);
@@ -41,6 +55,12 @@ const ScreenGame = {
     }
 
     this.state = parseLevel(this.lv);
+    this._initStoryFields();
+    Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
+  },
+
+  // transient per-screen state shared by all modes
+  _initStoryFields() {
     this.history = [];
     this.filled = {};
     this.mode = 'play';
@@ -65,15 +85,109 @@ const ScreenGame = {
     this.uiT = 0;
     this.gearTab = 'equipment';
     this.gearSel = 0;
-    Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
-    // hint scrolls + gear/inventory buttons are story-only (relics)
+    this.coinsRun = 0;        // coins gathered across the whole dungeon run
+    this._song = null;        // current music track (avoid restarts per room)
+    this._outroDone = false;
+    this.roomTrans = null;
     const hintBtn = document.getElementById('btn-hint');
     if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
     document.body.classList.toggle('no-relics', this.gameMode !== 'story');
     this._pulseGear(false);
-    if (this.gameMode === 'story' && this.lv.intro && this.firstTime) {
-      this.showDialog(this.lv.intro, () => {});
+  },
+
+  // ── dungeon room loading / transitions ──
+  _loadRoom(roomId, entrySide, startPos) {
+    const room = this.dungeon.rooms[roomId];
+    this.roomId = roomId;
+    this.visited[roomId] = true;
+    // restore a persisted room state, or parse it fresh
+    let st = this.rooms[roomId];
+    if (!st) { st = parseLevel({ map: room.map, chest: room.chest || null }); this.rooms[roomId] = st; }
+    st.dark = !!room.dark;
+    st.keys = this.dkeys;
+    // place the player: dungeon start, or just inside the entry door
+    if (startPos) { st.player.r = startPos.r; st.player.c = startPos.c; st.player.dir = 'down'; }
+    else if (entrySide) {
+      const { w, h } = Dungeon.dims(room), inner = Dungeon.innerCell(w, h, entrySide);
+      st.player.r = inner.r; st.player.c = inner.c;
+      st.player.dir = { n: 'down', s: 'up', e: 'left', w: 'right' }[entrySide];
     }
+    this.state = st;
+    this.lv = { map: room.map, chest: room.chest || null };
+    this.history = [];
+    this.filled = {};
+    this._recomputeFilled();
+    this.anim = null; this.heldDir = null; this.queued = null;
+    const song = st.dark ? 'deep' : 'dungeon';
+    if (song !== this._song) { Snd.playMusic(song); this._song = song; }
+  },
+
+  _maybeRoomIntro() {
+    const room = this.dungeon.rooms[this.roomId];
+    if (this.firstTime && room.intro && !this._seenIntro(this.roomId)) {
+      this._markIntro(this.roomId);
+      this.showDialog(room.intro, () => {});
+    }
+  },
+  _seenIntro(id) { return this._introSeen && this._introSeen[id]; },
+  _markIntro(id) { (this._introSeen = this._introSeen || {})[id] = true; },
+
+  // ── door transitions (dungeon mode) ──
+  // is the cell the player would step into an edge doorway of this room?
+  _doorAhead(dc, dr) {
+    const room = this.dungeon.rooms[this.roomId];
+    const { w, h } = Dungeon.dims(room);
+    const tr = this.state.player.r + dr, tc = this.state.player.c + dc;
+    for (const side of D_SIDES) {
+      if (!room.doors[side]) continue;
+      const cell = Dungeon.doorCell(w, h, side);
+      if (cell.r === tr && cell.c === tc) return { side };
+    }
+    return null;
+  },
+  _tryDoor(side) {
+    const room = this.dungeon.rooms[this.roomId];
+    const type = room.doors[side];
+    this.state.player.dir = { n: 'up', s: 'down', e: 'right', w: 'left' }[side];
+    if (type === 'lock' && !this.unlocked[this.roomId + ':' + side]) {
+      if (this.state.keys > 0) {
+        this.state.keys--; this.dkeys = this.state.keys;
+        this._unlockDoor(this.roomId, side);
+        Snd.doorUnlock();
+      } else { Snd.bump(); this.showToast('LOCKED. FIND A KEY.'); return; }
+    } else if (type === 'shutter' && !Dungeon.roomSolved(this.state)) {
+      Snd.bump(); this.showToast('SEALED. SOLVE THIS ROOM.'); return;
+    }
+    this._beginRoomTransition(side);
+  },
+  // opening a lock-door unbars it from both rooms so backtracking is free
+  _unlockDoor(roomId, side) {
+    this.unlocked[roomId + ':' + side] = true;
+    const nid = Dungeon.neighborId(this.dungeon, this.dungeon.rooms[roomId], side);
+    if (nid) this.unlocked[nid + ':' + D_OPP[side]] = true;
+  },
+  _beginRoomTransition(side) {
+    const nid = Dungeon.neighborId(this.dungeon, this.dungeon.rooms[this.roomId], side);
+    if (!nid) { Snd.bump(); return; }
+    this.dkeys = this.state.keys;         // persist the shared key pool
+    this.mode = 'trans';
+    this.heldDir = null; this.queued = null; this.anim = null;
+    this.roomTrans = { side, nid, phase: 'out', t: 0 };
+    Snd.step();
+  },
+  // door cells + their live open/type for this room's render pass
+  _doorCells() {
+    const room = this.dungeon.rooms[this.roomId];
+    const { w, h } = Dungeon.dims(room);
+    const pass = Dungeon.passableSides(this.dungeon, this.roomId, this.state, this.unlocked);
+    const out = {};
+    for (const side of D_SIDES) {
+      const type = room.doors[side];
+      if (!type) continue;
+      const cell = Dungeon.doorCell(w, h, side);
+      out[cell.r + ',' + cell.c] = { side, type, open: !!pass[side] };
+    }
+    return out;
   },
 
   onHint() {
@@ -156,6 +270,11 @@ const ScreenGame = {
   // ── input ──
   attemptMove(dc, dr, fromRepeat) {
     if (this.mode !== 'play') return;
+    // dungeon: stepping toward a room-edge door leaves the room
+    if (this.gameMode === 'story') {
+      const d = this._doorAhead(dc, dr);
+      if (d) { if (!fromRepeat) this._tryDoor(d.side); return; }
+    }
     const res = move(this.state, dc, dr, this.inventory());
     const evs = res.events;
     const has = t => evs.some(e => e.type === t);
@@ -218,6 +337,7 @@ const ScreenGame = {
     this.state = a.newState;
     this.mode = 'play';
     const has = t => a.events.some(e => e.type === t);
+    if (this.gameMode === 'story') this.dkeys = this.state.keys;
     if (a.push && !has('blockFall')) { Snd.thud(); Platform.haptic(); }
     if (has('blockFall')) {
       const ev = a.events.find(e => e.type === 'blockFall');
@@ -227,7 +347,7 @@ const ScreenGame = {
     }
     if (has('switchOn')) Snd.switchOn();
     if (has('snuff')) Snd.snuff();
-    if (has('coin')) Snd.coin();
+    if (has('coin')) { Snd.coin(); this.coinsRun = (this.coinsRun || 0) + 1; }
     if (has('key')) Snd.keyGet();
     if (has('exitOpen')) {
       Snd.exitOpen();
@@ -349,6 +469,12 @@ const ScreenGame = {
     this.anim = null; this.fallAnim = null;
     this.history.push(this.state);
     this.state = parseLevel(this.lv);
+    if (this.gameMode === 'story') {
+      const room = this.dungeon.rooms[this.roomId];
+      this.state.dark = !!room.dark;
+      this.state.keys = this.dkeys;
+      this.rooms[this.roomId] = this.state;   // keep persisted room in sync
+    }
     this.filled = {};
     this.exitGlow = 0;
     this.mode = 'play';
@@ -398,18 +524,27 @@ const ScreenGame = {
   _enterResults() {
     if (this.gameMode === 'challenge') return this._challengeClear();
     if (this.gameMode === 'timed') return this._timedClear();
-    const first = this.firstTime && !this._awarded;
-    const coins = 5 + this.state.coinsGot + (first ? 10 : 0);
-    this._awarded = true;
-    Save.completeStoryLevel(this.levelId, this.state.moves, coins);
-    const next = nextStoryLevel(this.levelId);
+    // ── dungeon cleared ──
+    const first = !Save.isDungeonDone(this.dungeon.id);
+    const bonus = first ? 40 : 0;
+    if (!this._awarded) {
+      this._awarded = true;
+      if (this.coinsRun) Save.addCoins(this.coinsRun);
+      Save.completeDungeon(this.dungeon.id, bonus);
+    }
+    const next = nextDungeon(this.dungeon.id);
+    const relic = ITEMS[this.dungeon.item];
     const items = [];
-    if (next) items.push({ label: 'NEXT LEVEL', action: () => App.setScreen('game', { levelId: next.id }) });
-    items.push({ label: 'LEVEL SELECT', action: () => App.setScreen('story') });
-    const lines = ['MOVES: ' + this.state.moves, 'COINS +' + coins];
-    if (first) lines.push('FIRST CLEAR BONUS +10');
+    if (next) items.push({ label: 'NEXT DUNGEON', action: () => App.setScreen('game', { gameMode: 'story', dungeonId: next.id }) });
+    items.push({ label: 'DUNGEON SELECT', action: () => App.setScreen('story') });
+    const gathered = this.coinsRun || 0;
+    const lines = [];
+    if (relic) lines.push('RELIC: ' + relic.name);
+    if (gathered) lines.push('COINS GATHERED +' + gathered);
+    if (first) lines.push('FIRST CLEAR BONUS +' + bonus);
+    lines.push('TOTAL +' + (gathered + bonus) + ' COINS');
     this.resultInfo = {
-      title: 'LEVEL CLEAR', sub: this.lv.name,
+      title: 'DUNGEON CLEARED', sub: this.dungeon.name,
       lines,
       list: new MenuList(items),
     };
@@ -530,6 +665,21 @@ const ScreenGame = {
       this.dialog.chars = Math.min(this.dialog.text.length, this.dialog.chars + dt * 46);
     }
 
+    if (this.mode === 'trans' && this.roomTrans) {
+      const rt = this.roomTrans, DUR = 0.16;
+      rt.t += dt;
+      if (rt.phase === 'out' && rt.t >= DUR) {
+        this._loadRoom(rt.nid, D_OPP[rt.side], null);
+        this.mode = 'trans';           // _loadRoom doesn't set mode
+        rt.phase = 'in'; rt.t = 0;
+      } else if (rt.phase === 'in' && rt.t >= DUR) {
+        this.roomTrans = null;
+        this.mode = 'play';
+        this._maybeRoomIntro();
+      }
+      return;
+    }
+
     if (this.mode === 'moving' && this.anim) {
       this.anim.t += dt * 1000;
       this.frame = 1 + Math.floor((this.anim.t / moveMs()) * 3.99) % 4;
@@ -551,11 +701,9 @@ const ScreenGame = {
     if (this.mode === 'won') {
       this.wonT += dt;
       if (this.wonT > (this.gameMode === 'timed' ? 0.6 : 1.15)) {
-        if (this.gameMode === 'story' && this.lv.outro && this.firstTime) {
-          const outro = this.lv.outro;
-          this.lv = Object.assign({}, this.lv, { outro: null });
-          this.showDialog(outro, () => this._enterResults());
-          this.mode = 'dialog';
+        if (this.gameMode === 'story' && this.firstTime && this.dungeon.outro && !this._outroDone) {
+          this._outroDone = true;
+          this.showDialog(this.dungeon.outro, () => this._enterResults());
         } else {
           this._enterResults();
         }
@@ -576,10 +724,15 @@ const ScreenGame = {
     const bx = Math.floor((W - T * st.w) / 2);
     const by = hudH + Math.floor((H - hudH - botH - T * st.h) / 2);
     this._board = { bx, by, T };
+    this._doors = this.gameMode === 'story' ? this._doorCells() : null;
 
     for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
       const x = bx + c * T, y = by + r * T, t = st.tiles[r][c];
-      if (t === TILE.WALL) Art.wall(ctx, x, y, T);
+      if (t === TILE.WALL) {
+        const dd = this._doors && this._doors[r + ',' + c];
+        if (dd) Art.doorway(ctx, x, y, T, dd.side, dd.type, dd.open);
+        else Art.wall(ctx, x, y, T);
+      }
       else if (t === TILE.FLOOR) {
         Art.floor(ctx, x, y, T);
         if (this.filled[r + ',' + c]) {
@@ -651,9 +804,10 @@ const ScreenGame = {
     const animSt = this.anim ? this.anim.newState : st;
     Art.hero(ctx, animSt.player.dir, this.frame, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing);
 
-    // darkness (ch5): chunky per-tile falloff around the lantern
+    // darkness: a lit circle only when the PALE LANTERN is equipped;
+    // otherwise the dark closes in and nudges you to the gear screen
     if (st.dark) {
-      const radius = 2.4;
+      const radius = this.inventory().lantern ? 2.4 : 0.55;
       for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
         const d = Math.max(Math.abs(r - hr), Math.abs(c - hc));
         let a = Math.min(0.94, Math.max(0, (d - radius) * 0.55));
@@ -714,6 +868,15 @@ const ScreenGame = {
     if ((this.mode === 'results' || this.mode === 'runover') && this.resultInfo) this.drawResults(ctx, W, H);
     if (this.mode === 'paused') this.drawPause(ctx, W, H);
     if (this.mode === 'gear') GearUI.draw(this, ctx, W, H);
+
+    // room-to-room fade (dungeon transitions)
+    if (this.roomTrans) {
+      const rt = this.roomTrans, DUR = 0.16;
+      let a = rt.phase === 'out' ? rt.t / DUR : 1 - rt.t / DUR;
+      a = Math.max(0, Math.min(1, a));
+      ctx.fillStyle = `rgba(2,3,6,${a})`;
+      ctx.fillRect(0, 0, W, H);
+    }
   },
 
   drawPause(ctx, W, H) {
@@ -745,7 +908,7 @@ const ScreenGame = {
     ctx.fillRect(bxo, byo, 2, bh); ctx.fillRect(bxo + bw - 2, byo, 2, bh);
     drawText(ctx, '◀', bxo + 11, byo + Math.floor(bh / 2) - 6, 2, PAL.ui, 'left');
     drawText(ctx, 'MENU', bxo + 26, byo + Math.floor(bh / 2) - 3, 1, PAL.uiDim, 'left');
-    const title = this.gameMode === 'story' ? this.levelId + ' ' + this.lv.name : this.levelId;
+    const title = this.gameMode === 'story' ? this.dungeon.name : this.levelId;
     // center in the free span between the back button and coins/keys
     const spanL = bxo + bw + 10, spanR = W - (this.state.keys > 0 ? 150 : 108);
     drawTextFit(ctx, title, (spanL + spanR) / 2, 10, spanR - spanL - 6, 2, PAL.ui, 'center', '#000');
@@ -761,7 +924,8 @@ const ScreenGame = {
     // during play, preview coins collected this level; after the award
     // (results/runover) the save already includes them
     const awarded = this.mode === 'results' || this.mode === 'runover' || this._awarded;
-    coinsBadge(ctx, W - 12, 14, Save.data.coins + (awarded ? 0 : this.state.coinsGot), 2);
+    const preview = this.gameMode === 'story' ? (this.coinsRun || 0) : this.state.coinsGot;
+    coinsBadge(ctx, W - 12, 14, Save.data.coins + (awarded ? 0 : preview), 2);
     if (this.state.keys > 0) {
       Art.keyIcon(ctx, W - 110, 12, 16);
       drawText(ctx, '×' + this.state.keys, W - 96, 16, 2, PAL.goldHi, 'left');

@@ -1,26 +1,12 @@
 'use strict';
-// Verifies every story level is solvable with the items the player
-// can possess at that point in the campaign. Run: node tests/levels.test.js
+// Engine mechanics unit tests (per-room puzzle rules). Full multi-room
+// dungeon solvability lives in tests/dungeons.test.js.
+// Run: node tests/levels.test.js
 
 const path = require('path');
 const { solve, parseLevel, move } = require(path.join(__dirname, '..', 'js', 'engine.js'));
-const { STORY } = require(path.join(__dirname, '..', 'js', 'levels.js'));
 
 let failures = 0;
-const inventory = {}; // grows as chests grant items in level order
-
-for (const ch of STORY.chapters) {
-  for (const lv of ch.levels) {
-    const res = solve(lv, Object.assign({}, inventory), 800000);
-    if (res.solvable) {
-      console.log(`  OK  ${lv.id} ${lv.name} — solvable in ${res.moves} moves (${res.nodes || 0} nodes)`);
-    } else {
-      console.error(`FAIL  ${lv.id} ${lv.name} — NOT solvable (${res.reason}, ${res.nodes || 0} nodes)`);
-      failures++;
-    }
-    if (lv.chest) inventory[lv.chest.item] = true;
-  }
-}
 
 // sanity checks on engine mechanics
 function expect(name, cond) {

@@ -13,6 +13,7 @@ const GearUI = {
     { item: 'shield',  name: "WARDEN'S SHIELD",  use: 'WALK UNBURNED THROUGH FLAME.' },
     { item: 'glove',   name: 'TITAN GLOVE',      use: 'HEAVE HEAVY IRON BLOCKS.' },
     { item: 'lantern', name: 'PALE LANTERN',     use: 'LIGHT THE LIGHTLESS DEEP.' },
+    { item: 'boots',   name: 'STRIDER BOOTS',    use: 'STRIDE ACROSS OPEN CHASMS.' },
   ],
 
   // ── deep-blue OoT subscreen backdrop ──
@@ -142,7 +143,7 @@ const GearUI = {
   _invCells(g) {
     const cells = [];
     // relics (quest items)
-    for (const it of ['sword', 'shield', 'glove', 'lantern', 'sunstone']) {
+    for (const it of ['sword', 'shield', 'glove', 'lantern', 'boots', 'sunstone']) {
       cells.push({
         item: it, owned: Save.hasItem(it),
         name: ITEMS[it] ? ITEMS[it].name : it, desc: ITEMS[it] ? ITEMS[it].desc : '',

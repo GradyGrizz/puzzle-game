@@ -129,7 +129,7 @@ const ScreenTitle = {
     const big = Math.max(4, Math.floor(W / 82));
     const ly = H * 0.24;
     drawText(ctx, 'DELVE', W / 2, ly, big, PAL.goldHi, 'center', '#3a2808');
-    drawText(ctx, STORY.title, W / 2, ly + 7 * big + 12, Math.max(2, s), PAL.ui, 'center', '#000');
+    drawText(ctx, 'THE KEEP OF ALARIC', W / 2, ly + 7 * big + 12, Math.max(2, s), PAL.ui, 'center', '#000');
     // hero strolling on a floor strip
     const stripY = H * 0.56;
     const ts = 46;
@@ -191,7 +191,7 @@ const ScreenIntro = {
     this.page++;
     if (this.page >= this.cards.length) {
       Save.data.meta.seenIntro = true; Save.write();
-      App.setScreen('game', { levelId: '1-1' });
+      App.setScreen('game', { gameMode: 'story', dungeonId: 'd1' });
     }
   },
   onTap() { this._next(); },
@@ -207,18 +207,19 @@ const ScreenMenu = {
     this.t = 0;
     Snd.playMusic('title');
     const items = [];
-    // quick-continue straight into the next unfinished level
-    const all = allStoryLevels();
-    const next = all.find(l => !Save.isLevelDone(l.id));
-    const started = all.some(l => Save.isLevelDone(l.id));
+    // quick-continue straight into the next unfinished dungeon
+    const all = allDungeons();
+    const next = all.find(d => !Save.isDungeonDone(d.id) && isDungeonUnlocked(d.id, Save));
+    const started = all.some(d => Save.isDungeonDone(d.id));
+    const allDone = all.every(d => Save.isDungeonDone(d.id));
     if (next && started) {
       items.push({
-        label: 'CONTINUE', sub: next.id + ' ' + next.name, icon: 'play',
-        action: () => App.setScreen('game', { levelId: next.id }),
+        label: 'CONTINUE', sub: next.name, icon: 'play',
+        action: () => App.setScreen('game', { gameMode: 'story', dungeonId: next.id }),
       });
     }
     items.push(
-      { label: 'STORY', sub: next ? 'THE SUNKEN KEEP' : 'THE KEEP SHINES AGAIN', icon: 'sword', action: () => App.setScreen('story') },
+      { label: 'STORY', sub: allDone ? 'THE KEEP SHINES AGAIN' : 'THE KEEP OF ALARIC', icon: 'sword', action: () => App.setScreen('story') },
       { label: 'CHALLENGE', sub: 'ENDLESS DEPTHS', icon: 'depth', action: () => App.setScreen('challenge') },
       { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', icon: 'clock', action: () => App.setScreen('timed') },
       { label: 'SHOP', sub: 'SPEND YOUR COINS', icon: 'cart', action: () => App.setScreen('shop') },
@@ -248,152 +249,101 @@ const ScreenMenu = {
   onBack() { App.setScreen('title'); Snd.back(); },
 };
 
-// ══ STORY SELECT (chapter pager) ══════════════════════════════
+// ══ DUNGEON SELECT ════════════════════════════════════════════
 const ScreenStory = {
-  t: 0, sel: 0, chIdx: 0, cells: [], arrows: [],
-  enter(params) {
+  t: 0, sel: 0, cells: [],
+  enter() {
     this.t = 0;
     Snd.playMusic('title');
-    // open on the chapter containing the first unfinished level
-    const all = allStoryLevels();
-    const firstOpen = all.find(l => !Save.isLevelDone(l.id));
-    this.chIdx = 0;
-    if (firstOpen) {
-      this.chIdx = STORY.chapters.findIndex(ch => ch.levels.some(l => l.id === firstOpen.id));
-    } else {
-      this.chIdx = STORY.chapters.length - 1;
-    }
-    if (params && params.chapter != null) this.chIdx = params.chapter;
-    this._selectDefault();
-  },
-  _levels() { return STORY.chapters[this.chIdx].levels; },
-  _chapterUnlocked(i) {
-    if (i === 0) return true;
-    return isLevelUnlocked(STORY.chapters[i].levels[0].id, Save);
-  },
-  _selectDefault() {
-    const lvls = this._levels();
-    this.sel = lvls.findIndex(l => !Save.isLevelDone(l.id) && isLevelUnlocked(l.id, Save));
-    if (this.sel < 0) this.sel = 0;
-  },
-  _switchChapter(dir) {
-    const ni = this.chIdx + dir;
-    if (ni < 0 || ni >= STORY.chapters.length) return;
-    this.chIdx = ni;
-    this._selectDefault();
-    Snd.blip();
+    const all = allDungeons();
+    let idx = all.findIndex(d => !Save.isDungeonDone(d.id) && isDungeonUnlocked(d.id, Save));
+    if (idx < 0) idx = 0;
+    this.sel = idx;
   },
   update(dt) { this.t += dt; },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 220));
-    const ch = STORY.chapters[this.chIdx];
-    const unlocked = this._chapterUnlocked(this.chIdx);
-    const prog = chapterProgress(ch, Save);
-    const allDone = allStoryLevels().every(l => Save.isLevelDone(l.id));
+    const all = allDungeons();
+    const allDone = all.every(d => Save.isDungeonDone(d.id));
 
-    // chapter header with pager arrows (title fitted between them)
-    drawTextFit(ctx, ch.name, W / 2, 34, W - 132, s + 1, unlocked ? PAL.goldHi : PAL.uiDim, 'center', '#000');
-    drawTextFit(ctx, allDone ? 'THE KEEP SHINES AGAIN.' : ch.tagline, W / 2, 34 + 8 * (s + 1) + 6, W - 24, 1, PAL.uiDim, 'center');
-    drawText(ctx, (this.chIdx + 1) + '/' + STORY.chapters.length + ' · ' + prog.done + '/' + prog.total + ' CLEAR',
-      W / 2, 34 + 8 * (s + 1) + 20, 1, PAL.uiDim, 'center');
-    this.arrows = [];
-    if (this.chIdx > 0) {
-      this.arrows.push({ x: 18, y: 26, w: 40, h: 40, dir: -1 });
-      drawText(ctx, '◀', 30, 34, s + 1, PAL.gold, 'left');
-    }
-    if (this.chIdx < STORY.chapters.length - 1) {
-      this.arrows.push({ x: W - 58, y: 26, w: 40, h: 40, dir: 1 });
-      drawText(ctx, '▶', W - 30, 34, s + 1, this._chapterUnlocked(this.chIdx + 1) ? PAL.gold : PAL.uiDark, 'right');
-    }
-    coinsBadge(ctx, W - 16, 4, Save.data.coins, 1);
+    drawTextFit(ctx, 'THE KEEP OF ALARIC', W / 2, 30, W - 120, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, allDone ? 'THE KEEP SHINES AGAIN.' : 'CHOOSE YOUR DESCENT', W / 2, 30 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
     drawText(ctx, 'BACK', 16, 8, 1, PAL.uiDim, 'left');
+    coinsBadge(ctx, W - 16, 4, Save.data.coins, 1);
 
-    // level grid for this chapter
-    const lvls = this._levels();
-    const perRow = 4;
-    const cell = Math.min(74, Math.floor((W - 60) / perRow));
-    const gw = perRow * (cell + 10) - 10;
-    const gx = (W - gw) / 2, gy = Math.max(112, H * 0.17);
+    const cardW = Math.min(W - 32, 448);
+    const cardH = 64, gap = 10;
+    const x = (W - cardW) / 2;
+    let y = Math.max(80, H * 0.12);
     this.cells = [];
-    for (let i = 0; i < lvls.length; i++) {
-      const lv = lvls[i];
-      const r = Math.floor(i / perRow), c = i % perRow;
-      const x = gx + c * (cell + 10), y = gy + r * (cell + 10);
-      this.cells.push({ x, y, w: cell, h: cell });
-      const done = Save.isLevelDone(lv.id);
-      const lvUnlocked = isLevelUnlocked(lv.id, Save);
+    for (let i = 0; i < all.length; i++) {
+      const d = all[i];
+      const unlocked = isDungeonUnlocked(d.id, Save);
+      const done = Save.isDungeonDone(d.id);
       const seld = i === this.sel;
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x + 3, y + 3, cell, cell);
-      ctx.fillStyle = seld ? '#161226' : '#0d1120';
-      ctx.fillRect(x, y, cell, cell);
-      if (seld) { ctx.fillStyle = 'rgba(210,160,40,0.10)'; ctx.fillRect(x, y, cell, cell); }
-      ctx.fillStyle = seld ? PAL.gold : (done ? 'rgba(210,160,40,0.4)' : 'rgba(255,255,255,0.12)');
-      ctx.fillRect(x, y, cell, 2); ctx.fillRect(x, y + cell - 2, cell, 2);
-      ctx.fillRect(x, y, 2, cell); ctx.fillRect(x + cell - 2, y, 2, cell);
-      if (!lvUnlocked) {
-        ctx.fillStyle = PAL.uiDark;
-        const lx = x + cell / 2 - 8, ly2 = y + cell / 2 - 8;
-        ctx.fillRect(lx + 2, ly2, 12, 6);
-        ctx.fillRect(lx + 2, ly2, 3, 8); ctx.fillRect(lx + 11, ly2, 3, 8);
-        ctx.fillRect(lx, ly2 + 7, 16, 11);
-      } else {
-        drawText(ctx, lv.id, x + cell / 2, y + cell / 2 - 8, s, done ? PAL.goldHi : PAL.ui, 'center', '#000');
-        if (done) drawText(ctx, '★', x + cell / 2, y + cell - 16, 1, PAL.gold, 'center');
-        if (lv.chest) {
-          // small chest pip marks relic levels
-          ctx.fillStyle = '#6e4a22'; ctx.fillRect(x + 6, y + 6, 10, 7);
-          ctx.fillStyle = PAL.gold; ctx.fillRect(x + 6, y + 8, 10, 2);
+      const appear = Math.min(1, Math.max(0, (this.t - i * 0.05) / 0.16));
+      const ease = 1 - Math.pow(1 - appear, 3);
+      const iy = Math.round(y + (1 - ease) * 14);
+      this.cells.push({ x, y: iy, w: cardW, h: cardH });
+      if (appear > 0) {
+        ctx.save();
+        ctx.globalAlpha = ease;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + 4, iy + 4, cardW, cardH);
+        ctx.fillStyle = seld ? '#161226' : '#0d1120'; ctx.fillRect(x, iy, cardW, cardH);
+        if (seld) { ctx.fillStyle = 'rgba(210,160,40,0.08)'; ctx.fillRect(x, iy, cardW, cardH); }
+        ctx.fillStyle = seld ? PAL.gold : (done ? 'rgba(210,160,40,0.4)' : 'rgba(255,255,255,0.10)');
+        ctx.fillRect(x, iy, cardW, 2); ctx.fillRect(x, iy + cardH - 2, cardW, 2);
+        ctx.fillRect(x, iy, 2, cardH); ctx.fillRect(x + cardW - 2, iy, 2, cardH);
+        if (seld) { ctx.fillStyle = PAL.goldHi; ctx.fillRect(x, iy, 5, cardH); }
+        // relic icon (or padlock if sealed)
+        const icoX = x + 16, icoY = iy + (cardH - 34) / 2;
+        if (unlocked) {
+          Art.item(ctx, d.item, icoX, icoY, 34);
+        } else {
+          ctx.fillStyle = PAL.uiDark;
+          const lx = icoX + 6, ly2 = icoY + 6;
+          ctx.fillRect(lx + 3, ly2, 14, 7);
+          ctx.fillRect(lx + 3, ly2, 3, 10); ctx.fillRect(lx + 14, ly2, 3, 10);
+          ctx.fillRect(lx, ly2 + 9, 20, 13);
         }
+        const tx = x + 62;
+        drawText(ctx, 'DUNGEON ' + (i + 1), tx, iy + 11, 1, PAL.uiDim, 'left');
+        drawTextFit(ctx, unlocked ? d.name : '? ? ?', tx, iy + 23, cardW - 150, s, unlocked ? (seld ? PAL.goldHi : PAL.ui) : PAL.uiDim, 'left', '#000');
+        drawTextFit(ctx, unlocked ? d.tagline : 'SEALED UNTIL THE PRIOR DELVE IS DONE', tx, iy + 23 + 8 * s + 4, cardW - 82, 1, PAL.uiDim, 'left');
+        if (done) drawText(ctx, '★ CLEAR', x + cardW - 14, iy + 11, 1, PAL.gold, 'right');
+        else if (unlocked) drawText(ctx, roomCount(d) + ' ROOMS', x + cardW - 14, iy + 11, 1, PAL.uiDim, 'right');
+        ctx.restore();
       }
+      y += cardH + gap;
     }
-    const selLv = lvls[this.sel];
-    if (selLv) {
-      const rows = Math.ceil(lvls.length / perRow);
-      const infoY = gy + rows * (cell + 10) + 12;
-      const showName = isLevelUnlocked(selLv.id, Save);
-      drawTextFit(ctx, showName ? selLv.name : '???', W / 2, infoY, W - 24, s, PAL.ui, 'center', '#000');
-    }
-    // relics owned
+    // relics collected so far
     const items = Object.keys(Save.data.story.items);
     if (items.length) {
       let ix = 20;
-      const iy = H - (App.isTouch ? 260 : 60);
-      drawText(ctx, 'RELICS:', ix, iy + 8, 1, PAL.uiDim, 'left');
-      ix += 52;
-      for (const it of items) { Art.item(ctx, it, ix, iy, 24); ix += 32; }
+      const iy = H - (App.isTouch ? 256 : 54);
+      drawText(ctx, 'RELICS', ix, iy + 8, 1, PAL.uiDim, 'left');
+      ix += 50;
+      for (const it of items) { Art.item(ctx, it, ix, iy, 24); ix += 30; }
     }
   },
   _start() {
-    const lv = this._levels()[this.sel];
-    if (!lv || !isLevelUnlocked(lv.id, Save)) { Snd.error(); return; }
+    const d = allDungeons()[this.sel];
+    if (!d || !isDungeonUnlocked(d.id, Save)) { Snd.error(); return; }
     Snd.select();
-    App.setScreen('game', { levelId: lv.id });
+    App.setScreen('game', { gameMode: 'story', dungeonId: d.id });
   },
   onDirPress(dc, dr) {
-    const perRow = 4, n = this._levels().length;
-    if (dc) {
-      const col = this.sel % perRow;
-      // walking off the grid edge pages between chapters
-      if (dc < 0 && col === 0) { this._switchChapter(-1); return; }
-      if (dc > 0 && (col === perRow - 1 || this.sel === n - 1)) { this._switchChapter(1); return; }
-    }
-    const s2 = this.sel + dc + dr * perRow;
-    if (s2 >= 0 && s2 < n && s2 !== this.sel) { this.sel = s2; Snd.blip(); }
+    const n = allDungeons().length;
+    if (dr) { this.sel = (this.sel + dr + n) % n; Snd.blip(); }
   },
   onDirRelease() {},
   onConfirm() { this._start(); },
   onTap(x, y) {
     if (y < 40 && x < 90) { this.onBack(); return; }
-    for (const a of this.arrows) {
-      if (x >= a.x && x < a.x + a.w && y >= a.y - 14 && y < a.y + a.h) { this._switchChapter(a.dir); return; }
-    }
     for (let i = 0; i < this.cells.length; i++) {
       const r = this.cells[i];
-      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
-        this.sel = i; this._start(); return;
-      }
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) { this.sel = i; this._start(); return; }
     }
   },
   onBack() { Snd.back(); App.setScreen('menu'); },
