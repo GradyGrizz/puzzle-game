@@ -616,11 +616,17 @@ _activeSheet() {
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   // pick the right frame box: idle pose when standing, else walk/push cycle.
-  // The sheet's PUSH.up frame reaches its arms out to the side (reads as a
-  // side-push), so for the up-push we use the clean back-view WALK.up cycle.
-  let box;
-  if (pushing) box = (dir === 'up' ? this.WALK.up : this.PUSH[dir])[frame % 4];
-  else if (idle) box = this.IDLE[dir];
+  // Two sheet quirks handled here:
+  //  - PUSH.up reaches its arms out to the side (reads as a side-push), so the
+  //    up-push uses the clean back-view WALK.up cycle instead.
+  //  - the sheet has no true left-push row (its "left" row faces right), so we
+  //    mirror the good PUSH.right frames for the left-push.
+  let box, flip = false;
+  if (pushing) {
+    if (dir === 'up') box = this.WALK.up[frame % 4];
+    else if (dir === 'left') { box = this.PUSH.right[frame % 4]; flip = true; }
+    else box = this.PUSH[dir][frame % 4];
+  } else if (idle) box = this.IDLE[dir];
   else box = this.WALK[dir][frame % 4];
   const [sx, sy, sw, sh] = box;
   const src = this._activeSheet();
@@ -636,7 +642,12 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+  if (flip) {
+    ctx.save(); ctx.translate(dx + dw, dy); ctx.scale(-1, 1);
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, dw, dh); ctx.restore();
+  } else {
+    ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
 },
 
 // ── UI chrome ────────────────────────────────────────────────

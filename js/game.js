@@ -911,7 +911,8 @@ const ScreenGame = {
     }
 
     this.drawHud(ctx, W, H, hudH);
-    if (this.gameMode === 'story' && this.mode !== 'gear') this.drawMinimap(ctx, W, H, hudH);
+    // the minimap only appears once you've claimed this dungeon's MAP chest
+    if (this.gameMode === 'story' && this.mapFound && this.mode !== 'gear') this.drawMinimap(ctx, W, H, hudH);
 
     if (this.toast) {
       let s = 2;
