@@ -173,6 +173,14 @@ const App = {
     this.canvas.addEventListener('pointerup', ptrUp);
     this.canvas.addEventListener('pointercancel', () => { ptr = null; });
 
+    // mouse-wheel / trackpad scrolling (desktop) for scrollable screens
+    this.canvas.addEventListener('wheel', e => {
+      if (this.transition || !this.screen || !this.screen.onScroll) return;
+      e.preventDefault();
+      const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY; // lines -> px
+      this.screen.onScroll(-d);
+    }, { passive: false });
+
     // d-pad buttons
     const DIRS = {
       'dp-up': [0, -1], 'dp-down': [0, 1],
