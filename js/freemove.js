@@ -151,11 +151,9 @@ const FM = {
       else if (st.tiles[ct.r][ct.c] === TILE.BUSH) bush = ct;
       else if (st.chest && !st.chest.opened && st.chest.r === ct.r && st.chest.c === ct.c) chest = ct;
     }
-    // 2) cut bramble on contact (instant, feels like a slash)
-    if (bush && g.inventory().sword) {
-      const { res, before } = this._act(g, bush.dir);
-      if (res.ok && res.events.some(e => e.type === 'cut')) { g._pushHistory(before); g.state = res.state; g.pushT = 0; events.push(...res.events); return; }
-    } else if (bush) { events.push({ type: 'needItem', item: 'sword' }); }
+    // 2) bramble always stays solid on contact. It is cut only by swing(),
+    // when the equipped sword's attack is facing an adjacent bush.
+    if (bush && !g.inventory().sword) events.push({ type: 'needItem', item: 'sword' });
     // 3) open chest on contact
     if (chest) {
       const { res, before } = this._act(g, chest.dir);
@@ -226,7 +224,7 @@ const FM = {
 
   // sword swing (attack button): plays a swing pose and, if we're facing an
   // adjacent bush with a sword, cuts it — the same tested engine path used when
-  // you walk into bramble. This is the hook the combat system will extend to
+  // the player attacks it. The same attack window also
   // strike enemies in the facing arc.
   swing(g) {
     const events = [];
