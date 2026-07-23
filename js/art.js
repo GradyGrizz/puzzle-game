@@ -607,9 +607,52 @@ _loadAux() {
     img.src = files[dir];
   }
 },
+// Rebalance the push sheet's proportions: the source hero has an oversized,
+// forward-hunched head that reads as chibi next to the walk/idle sprite. For
+// each frame we shrink the head (hair, above the tunic line) a touch and centre
+// it over the body, which enlarges the body's share and straightens the lean —
+// so it reads as the same character/size as the walk sprite. Returns a corrected
+// canvas the rest of the slicing runs on; falls back to the original on any error.
+_fixProportions(img) {
+  try {
+    const HS = 0.85;                       // head scale (relative to body)
+    const W = img.naturalWidth, H = img.naturalHeight, cw = Math.floor(W / 4);
+    const sc = document.createElement('canvas'); sc.width = W; sc.height = H;
+    const scx = sc.getContext('2d'); scx.drawImage(img, 0, 0);
+    const d = scx.getImageData(0, 0, W, H).data;
+    const A = (x, y) => d[(y * W + x) * 4 + 3] > 60;
+    const isGreen = (x, y) => { const i = (y * W + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2]; return d[i + 3] > 60 && G > R + 6 && G > B + 6 && G > 60; };
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const ctx = out.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    for (let f = 0; f < 4; f++) {
+      const x0 = f * cw;
+      let top = H, feet = 0;
+      for (let y = 0; y < H; y++) for (let x = x0; x < x0 + cw; x++) if (A(x, y)) { if (y < top) top = y; if (y > feet) feet = y; }
+      if (feet < top) continue;
+      let neck = -1;
+      for (let y = top; y <= feet; y++) { let g = 0; for (let x = x0; x < x0 + cw; x++) if (isGreen(x, y)) g++; if (g >= 8) { neck = y; break; } }
+      if (neck < 0) neck = Math.round(top + (feet - top) * 0.48);   // no tunic found → assume mid-height
+      // horizontal centroids of body (tunic+legs) and head (everything above neck)
+      let bsx = 0, bn = 0, hsx = 0, hn = 0;
+      for (let y = neck; y <= feet; y++) for (let x = x0; x < x0 + cw; x++) if (A(x, y)) { bsx += x; bn++; }
+      for (let y = top; y < neck; y++) for (let x = x0; x < x0 + cw; x++) if (A(x, y)) { hsx += x; hn++; }
+      const bodyCX = bn ? bsx / bn : x0 + cw / 2, headCX = hn ? hsx / hn : x0 + cw / 2;
+      // body stays put; head shrinks and re-centres over the body, bottom kept a
+      // touch into the shoulders so there's no gap at the neck
+      ctx.drawImage(sc, x0, neck, cw, feet - neck + 1, x0, neck, cw, feet - neck + 1);
+      const headH = neck - top, overlap = Math.round(headH * 0.10), nh = headH * HS;
+      const destBottom = neck + overlap, destTop = destBottom - nh;
+      const dX = bodyCX - (headCX - x0) * HS;
+      ctx.drawImage(sc, x0, top, cw, headH, dX, destTop, cw * HS, nh);
+    }
+    return out;
+  } catch (e) { return img; }
+},
+
 _sliceAux(dir, img) {
   try {
-    const W = img.naturalWidth, H = img.naturalHeight;
+    img = this._fixProportions(img);       // rebalance head/body proportions first
+    const W = img.width || img.naturalWidth, H = img.height || img.naturalHeight;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
     const d = c.getImageData(0, 0, W, H).data, A = (x, y) => d[(y * W + x) * 4 + 3];
