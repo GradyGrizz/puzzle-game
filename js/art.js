@@ -633,10 +633,16 @@ _sliceAux(dir, img) {
     const frames = [];
     for (let i = 0; i < 4; i++) {
       const x0 = i * cw;
-      let sx = 0, n = 0;
-      for (let y = top; y <= bot; y++) for (let x = x0; x < x0 + cw; x++) if (isHair(x, y)) { sx += x; n++; }
+      let sx = 0, n = 0, hairTop = bot, feet = top;
+      for (let y = top; y <= bot; y++) for (let x = x0; x < x0 + cw; x++) {
+        if (isHair(x, y)) { sx += x; n++; if (y < hairTop) hairTop = y; }
+        if (A(x, y) > 40 && y > feet) feet = y;   // lowest opaque row = feet
+      }
       const anchor = n ? (sx / n) - (x0 + cw / 2) : 0;   // hair centre relative to cell centre (source px)
-      frames.push([x0, top, cw, bh, anchor]);
+      // body span = head-top (hair) to feet; hero() normalises this to a fixed
+      // on-screen height so the push frames don't shrink/pulse vs walk/idle
+      // (a raised arm above the hair is ignored here and just extends upward)
+      frames.push([x0, top, cw, bh, anchor, hairTop, feet]);
     }
     this._aux[dir] = { img, frames };
   } catch (e) { /* cross-origin/tainted (file://) — fall back to main sheet */ }
@@ -729,13 +735,26 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   else box = this.WALK[dir][frame % 4];
   const [sx, sy, sw, sh] = box;
   if (!src || (src.complete === false)) return;
-  const dh = Math.round(tile * 1.05);
-  const dw = Math.round(dh * sw / sh);
-  // aux frames carry a head-anchor offset (source px): shift the draw so the
-  // head lands at the same spot every frame instead of sliding across the tile.
+  let dh, dw, dx, dy;
   const anchor = box[4] || 0;
-  const dx = px + ((tile - dw) >> 1) - Math.round(anchor * dw / sw);
-  const dy = py + tile - dh;
+  if (auxDir) {
+    // normalise the aux draw by the character's BODY height (head-to-feet), not
+    // the frame height, so the push frames render at exactly the same size as
+    // the walk/idle sprites (tile*1.05) and never shrink or pulse. The head
+    // anchor keeps it horizontally steady; the feet sit on the tile floor.
+    const hairTop = box[5], feet = box[6];
+    const bodyH = Math.max(1, feet - hairTop);
+    const scale = (tile * 1.05) / bodyH;
+    dw = Math.round(sw * scale);
+    dh = Math.round(sh * scale);
+    dx = px + ((tile - dw) >> 1) - Math.round(anchor * scale);
+    dy = Math.round(py + tile - (feet - sy) * scale);
+  } else {
+    dh = Math.round(tile * 1.05);
+    dw = Math.round(dh * sw / sh);
+    dx = px + ((tile - dw) >> 1) - Math.round(anchor * dw / sw);
+    dy = py + tile - dh;
+  }
   ctx.save();
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#000';
