@@ -219,7 +219,6 @@ const ScreenIntro = {
     const card = this.cards[Math.min(this.page, this.cards.length - 1)];
     const pw = Math.min(W - 40, 420), ph = 300;
     const px = (W - pw) / 2, py = H * 0.22;
-    drawText(ctx, 'TEST', W / 2, Math.max(48, py - 70), Math.max(6, s + 4), '#ff453a', 'center', '#000');
     Art.panel(ctx, px, py, pw, ph);
     drawText(ctx, card.title, W / 2, py + 22, s + 1, PAL.goldHi, 'center', '#000');
     // pictogram
