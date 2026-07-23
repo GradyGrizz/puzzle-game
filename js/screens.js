@@ -426,6 +426,7 @@ const ScreenSettings = {
     rows.push({ type: 'slider', label: 'MUSIC VOLUME', get: () => s.musicVol, set: v => { s.musicVol = v; this._apply(); }, dim: () => !s.music });
     rows.push({ type: 'toggle', label: 'SOUND FX', get: () => s.sfx, set: v => { s.sfx = v; this._apply(); } });
     rows.push({ type: 'slider', label: 'SFX VOLUME', get: () => s.sfxVol, set: v => { s.sfxVol = v; this._apply(); Snd.blip(); }, dim: () => !s.sfx });
+    rows.push({ type: 'button', label: 'TEST SOUND EFFECT', action: () => { Snd.unlock(); Snd.syncVolumes(); if (!s.sfx) this._say('SOUND FX ARE OFF.'); else { Snd.coin(); this._say('SOUND EFFECT PLAYED.'); } } });
     rows.push({ type: 'header', label: 'GAME' });
     rows.push({ type: 'toggle', label: 'HAPTICS', get: () => s.haptics, set: v => { s.haptics = v; Save.write(); if (v) Platform.haptic(); } });
     rows.push({ type: 'toggle', label: 'REDUCED FLASH', get: () => s.reducedFlash, set: v => { s.reducedFlash = v; Save.write(); } });
