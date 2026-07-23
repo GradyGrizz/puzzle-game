@@ -570,12 +570,24 @@ const ScreenGame = {
   },
 
   // ── right-thumb buttons ──
+  _syncAttackButton() {
+    const button = document.getElementById('btn-sword');
+    if (!button) return;
+    const unlocked = this.gameMode === 'test' || Save.hasItem('sword');
+    button.classList.toggle('locked', !unlocked);
+    button.setAttribute('aria-disabled', unlocked ? 'false' : 'true');
+  },
   onAttack() {
     if (this.mode === 'dialog') return this._advanceDialog();
     if (this.mode === 'chest') return this._advanceChest();
     if (this.mode !== 'play') return;
+    if (!this.inventory().sword) {
+      Snd.error();
+      this.showToast(Save.hasItem('sword') ? 'EQUIP YOUR BLADE FIRST!' : 'YOU NEED TO FIND A BLADE.');
+      return;
+    }
     if (Snd.swing) Snd.swing();
-    if (this.combat && this.inventory().sword) Combat.startAttack(this.combat);
+    if (this.combat) Combat.startAttack(this.combat);
     const evs = FM.swing(this);
     if (evs && evs.length) this._handleFreeEvents(evs);
   },
@@ -856,6 +868,7 @@ const ScreenGame = {
   update(dt) {
     this.t += dt;
     this.uiT += dt;
+    this._syncAttackButton();
     if (this.toast) { this.toast.t -= dt; if (this.toast.t <= 0) this.toast = null; }
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.2);
     if (this.exitGlow > 0) this.exitGlow = Math.max(0, this.exitGlow - dt * 0.4);
