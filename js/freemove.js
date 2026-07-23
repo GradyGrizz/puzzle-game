@@ -143,7 +143,12 @@ const FM = {
     // vacates that cell and held input carries the player in smoothly, so the
     // motion stays continuous (no per-push snap) and the push pose holds.
     if (block) {
-      g.pushGrace = 0.16;
+      // arm the push pose (0.30s), tagged with the direction we're shoving.
+      // it must outlast a single shove: after the block slides you glide up a
+      // tile to catch it before re-contact, and if the pose lapsed in that gap
+      // the sprite would pop to the walk frame and back every cycle (jitter).
+      // render gates on "still holding this direction", so it never lingers.
+      g.pushGrace = 0.30; g.pushDir = { n: 'up', s: 'down', e: 'right', w: 'left' }[block.dir];
       this._align(g, block, dt);
       g.pushT = (g.pushT || 0) + dt;
       if (g.pushT >= this.PUSH_T) {
@@ -153,6 +158,7 @@ const FM = {
           g._pushHistory(before);
           g.state = res.state;
           g.blockSlide = { fr: pushEv.fr, fc: pushEv.fc, tr: pushEv.tr, tc: pushEv.tc, t: 0 };
+          g.pushGrace = 0.30;   // refresh so the pose bridges the catch-up glide
           events.push(...res.events);
         } else if (!res.ok) {
           const need = res.events.find(e => e.type === 'needItem');
