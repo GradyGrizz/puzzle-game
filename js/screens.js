@@ -276,6 +276,8 @@ const ScreenMenu = {
       { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', icon: 'clock', action: () => App.setScreen('timed') },
       { label: 'SHOP', sub: 'SPEND YOUR COINS', icon: 'cart', action: () => App.setScreen('shop') },
       { label: 'SETTINGS', icon: 'gear', action: () => App.setScreen('settings') },
+    );
+    if (Save.devOn()) items.push(
       { label: 'TEST DUNGEON', sub: 'ALL SYSTEMS TESTING GROUND', icon: 'sword', action: () => App.setScreen('game', { gameMode: 'test' }) },
     );
     this.list = new MenuList(items);
