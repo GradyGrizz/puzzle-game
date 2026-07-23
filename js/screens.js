@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/23/2026 8:16am (mst)';
+const BUILD_STAMP = '7/23/2026 8:34am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
