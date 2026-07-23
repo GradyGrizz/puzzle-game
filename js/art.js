@@ -736,22 +736,26 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     else box = this.PUSH[dir][frame % 4];
   } else if (idle) box = this.IDLE[dir];
   else box = this.WALK[dir][frame % 4];
-  const [sx, sy, sw, sh] = box;
+  let [sx, sy, sw, sh] = box;
   if (!src || (src.complete === false)) return;
   let dh, dw, dx, dy;
   const anchor = box[4] || 0;
   if (auxDir) {
-    // normalise the aux draw by the character's BODY height (head-to-feet), not
-    // the frame height, so the push frames render at exactly the same size as
-    // the walk/idle sprites (tile*1.05) and never shrink or pulse. One sheet-wide
-    // span drives every frame, so size + vertical placement are identical across
-    // the cycle; only the head anchor shifts horizontally. Feet sit on the floor.
-    const bodyH = Math.max(1, auxDir.bodyBot - auxDir.bodyTop);
-    const scale = (tile * 1.05) / bodyH;
+    // Crop to the BODY region (head-top → feet) and draw it into a dest box
+    // whose height is EXACTLY round(tile*1.05) — the same integer body height as
+    // the walk/idle sprites — with the feet on the floor. Doing it per frame off
+    // each frame's own head/feet guarantees identical size every frame (no
+    // shrink, no shorter foot-lift frames, no rounding pulse). The head anchor
+    // keeps it horizontally steady; a ~1px hand-tip above the hair is trimmed,
+    // which is imperceptible.
+    const hairTop = box[5], feet = box[6];
+    const target = Math.round(tile * 1.05);
+    sy = hairTop; sh = Math.max(1, feet - hairTop + 1);   // body-only source crop
+    const scale = target / sh;
     dw = Math.round(sw * scale);
-    dh = Math.round(sh * scale);
+    dh = target;
     dx = px + ((tile - dw) >> 1) - Math.round(anchor * scale);
-    dy = Math.round(py + tile - (auxDir.bodyBot - sy) * scale);
+    dy = py + tile - target;
   } else {
     dh = Math.round(tile * 1.05);
     dw = Math.round(dh * sw / sh);
