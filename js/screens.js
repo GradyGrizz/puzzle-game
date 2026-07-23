@@ -215,10 +215,10 @@ const ScreenIntro = {
   update(dt) { this.t += dt; },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
-    const s = Math.max(2, Math.floor(W / 200));
+    const s = Math.max(2, Math.floor(Math.min(W, H) / 180));
     const card = this.cards[Math.min(this.page, this.cards.length - 1)];
-    const pw = Math.min(W - 40, 420), ph = 300;
-    const px = (W - pw) / 2, py = H * 0.22;
+    const pw = Math.min(W - 80, 700), ph = Math.min(260, H - 104);
+    const px = (W - pw) / 2, py = Math.max(44, H * 0.13);
     Art.panel(ctx, px, py, pw, ph);
     drawText(ctx, card.title, W / 2, py + 22, s + 1, PAL.goldHi, 'center', '#000');
     // pictogram
@@ -282,7 +282,7 @@ const ScreenMenu = {
   update(dt) { this.t += dt; },
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
-    const s = Math.max(2, Math.floor(W / 220));
+    const s = Math.max(2, Math.floor(Math.min(W, H) / 190));
     const ts = s + 2;
     drawText(ctx, 'DELVE', W / 2, 38, ts, PAL.goldHi, 'center', '#3a2808');
     // animated gold underline
@@ -292,7 +292,7 @@ const ScreenMenu = {
     ctx.fillRect(Math.round(W / 2 - uw / 2), 38 + 8 * ts + 4, uw, 3);
     coinsBadge(ctx, W - 16, 16, Save.data.coins, Math.max(2, s - 1));
     const iw = Math.min(W - 40, 360);
-    this.list.draw(ctx, W / 2, Math.max(112, H * 0.16), iw, 30 + s * 12, s, this.t);
+    this.list.draw(ctx, W / 2, Math.max(84, H * 0.20), iw, 26 + s * 8, s, this.t);
   },
   onDirPress(dc, dr) { if (dr) this.list.nav(dr); },
   onDirRelease() {},
