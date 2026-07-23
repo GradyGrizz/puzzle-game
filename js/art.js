@@ -651,6 +651,7 @@ _sliceAux(dir, img) {
   } catch (e) { /* cross-origin/tainted (file://) — fall back to main sheet */ }
 },
 
+
 // ── image assets sliced from the uploaded sprite sheets (art/) ──
 // Each draw falls back to the procedural version until its PNG is loaded,
 // so the game never blocks on these.
@@ -741,16 +742,15 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   let dh, dw, dx, dy;
   const anchor = box[4] || 0;
   if (auxDir) {
-    // Crop to the BODY region (head-top → feet) and draw it into a dest box
-    // whose height is EXACTLY round(tile*1.05) — the same integer body height as
-    // the walk/idle sprites — with the feet on the floor. Doing it per frame off
-    // each frame's own head/feet guarantees identical size every frame (no
-    // shrink, no shorter foot-lift frames, no rounding pulse). The head anchor
-    // keeps it horizontally steady; a ~1px hand-tip above the hair is trimmed,
-    // which is imperceptible.
+    // Crop each push frame to its BODY (head-top → feet) and draw it into a dest
+    // box whose height is EXACTLY round(tile*1.05) — the same integer body height
+    // the walk/idle sprites use — with the feet on the floor. This pins the
+    // on-screen body to idle's size (verified pixel-exact at T30, the tile size
+    // every dungeon uses on phones and the desktop bezel). The head anchor keeps
+    // it horizontally steady; a ~1px hand-tip above the hair is trimmed.
     const hairTop = box[5], feet = box[6];
     const target = Math.round(tile * 1.05);
-    sy = hairTop; sh = Math.max(1, feet - hairTop + 1);   // body-only source crop
+    sy = hairTop; sh = Math.max(1, feet - hairTop + 1);
     const scale = target / sh;
     dw = Math.round(sw * scale);
     dh = target;
