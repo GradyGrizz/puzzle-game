@@ -4,7 +4,7 @@
   "description": "A retro dungeon puzzle adventure. Push blocks, claim relics, race the depths.",
   "start_url": ".",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "landscape",
   "background_color": "#08090e",
   "theme_color": "#08090e",
   "icons": [
