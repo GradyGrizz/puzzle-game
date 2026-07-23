@@ -15,6 +15,7 @@ const App = {
     this.ctx = this.canvas.getContext('2d');
     Save.load();
     Snd.syncVolumes();
+    this.applyControlScheme();
     // default walk pace (dev tools can retune at runtime)
     this.moveMs = 350;
 
@@ -24,6 +25,7 @@ const App = {
       menu: ScreenMenu,
       story: ScreenStory,
       settings: ScreenSettings,
+      controls: ScreenControls,
       game: ScreenGame,
       challenge: ScreenChallenge,
       timed: ScreenTimed,
@@ -83,6 +85,14 @@ const App = {
   // in-game on-screen controls take the bottom slice on real touch devices
   // AND in the desktop phone frame — reserve space for them either way
   padControls() { return this.isTouch || this.framed; },
+
+  // reflect the saved control scheme onto <body> so the CSS shows the right
+  // on-screen controls (floating joystick + combat buttons, or the d-pad)
+  applyControlScheme() {
+    const scheme = (Save.data && Save.data.settings && Save.data.settings.controlScheme) || 'joystick';
+    document.body.classList.toggle('scheme-joystick', scheme === 'joystick');
+    document.body.classList.toggle('scheme-dpad', scheme === 'dpad');
+  },
 
   setScreen(name, params, instant) {
     if (instant) {
@@ -147,31 +157,49 @@ const App = {
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
 
-    // canvas taps + drag-scroll (tap fires on release if barely moved)
-    let ptr = null;
+    // canvas input: a floating joystick pointer (left thumb) runs alongside the
+    // tap/scroll pointer, so movement and taps/buttons work as separate touches.
+    let ptr = null;        // tap/scroll pointer {id,...}
+    let stickId = null;    // pointerId currently driving the joystick
     this.canvas.addEventListener('pointerdown', e => {
       if (this.transition) return;
       const r = this.canvas.getBoundingClientRect();
-      ptr = { x: e.clientX - r.left, y: e.clientY - r.top, ly: e.clientY - r.top, moved: false };
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      if (stickId === null && this.screen && this.screen.onStickDown &&
+          this.screen.onStickDown(x, y - this.safeTop)) {
+        stickId = e.pointerId;
+        if (this.canvas.setPointerCapture) { try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
+        return;
+      }
+      if (ptr === null) ptr = { id: e.pointerId, x, y, ly: y, moved: false };
     });
     this.canvas.addEventListener('pointermove', e => {
-      if (!ptr) return;
       const r = this.canvas.getBoundingClientRect();
-      const y = e.clientY - r.top;
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      if (e.pointerId === stickId) {
+        if (this.screen && this.screen.onStickMove) this.screen.onStickMove(x, y - this.safeTop);
+        return;
+      }
+      if (!ptr || e.pointerId !== ptr.id) return;
       const dy = y - ptr.ly;
       if (Math.abs(y - ptr.y) > 9) ptr.moved = true;
       if (ptr.moved && this.screen && this.screen.onScroll) this.screen.onScroll(dy);
       ptr.ly = y;
     });
+    const endStick = () => { stickId = null; if (this.screen && this.screen.onStickEnd) this.screen.onStickEnd(); };
     const ptrUp = e => {
-      if (!ptr) return;
+      if (e.pointerId === stickId) { endStick(); return; }
+      if (!ptr || e.pointerId !== ptr.id) return;
       const wasTap = !ptr.moved;
       const { x, y } = ptr;
       ptr = null;
       if (wasTap && !this.transition && this.screen && this.screen.onTap) this.screen.onTap(x, y - this.safeTop);
     };
     this.canvas.addEventListener('pointerup', ptrUp);
-    this.canvas.addEventListener('pointercancel', () => { ptr = null; });
+    this.canvas.addEventListener('pointercancel', e => {
+      if (e.pointerId === stickId) endStick();
+      else if (ptr && e.pointerId === ptr.id) ptr = null;
+    });
 
     // mouse-wheel / trackpad scrolling (desktop) for scrollable screens
     this.canvas.addEventListener('wheel', e => {
@@ -216,6 +244,8 @@ const App = {
     bindBtn('btn-hint', () => this.screen && this.screen.onHint && this.screen.onHint());
     bindBtn('btn-gear', () => this.screen && this.screen.onGear && this.screen.onGear());
     bindBtn('btn-bag', () => this.screen && this.screen.onBag && this.screen.onBag());
+    bindBtn('btn-sword', () => this.screen && this.screen.onAttack && this.screen.onAttack());
+    bindBtn('btn-act', () => this.screen && this.screen.onAction && this.screen.onAction());
 
     // keyboard
     const KEY_DIRS = {

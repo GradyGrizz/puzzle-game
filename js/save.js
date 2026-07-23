@@ -35,6 +35,7 @@ const Save = {
       settings: {
         music: true, musicVol: 0.8, sfx: true, sfxVol: 0.9,
         reducedFlash: false, haptics: true, tips: true,
+        controlScheme: 'joystick',   // 'joystick' (floating analog) | 'dpad'
       },
       dev: { on: false },
       meta: { seenIntro: false, launches: 0 },

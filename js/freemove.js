@@ -78,20 +78,43 @@ const FM = {
     return { res, before };
   },
 
+  ROLL_SPEED: 7.0,   // tiles / second during a dodge roll
+  ROLL_T: 0.24,      // roll duration (seconds)
+
   update(g, dt) {
     const events = [];
     g.pushGrace = Math.max(0, (g.pushGrace || 0) - dt);   // keep the push pose steady between shoves
+    if (g.swingT > 0) g.swingT = Math.max(0, g.swingT - dt);
     if (g.gameMode === 'story') g._doors = g._doorCells(); else g._doors = null;
-    const h = g.held || {};
-    let vx = (h.right ? 1 : 0) - (h.left ? 1 : 0);
-    let vy = (h.down ? 1 : 0) - (h.up ? 1 : 0);
-    const moving = !!(vx || vy);
-    if (vx && vy) { const k = Math.SQRT1_2; vx *= k; vy *= k; }
+
+    // movement vector: a dodge roll takes over; else the analog stick (variable
+    // speed via its magnitude); else the d-pad / keyboard booleans (8-way).
+    let vx, vy, mag;
+    if (g.roll && g.roll.t > 0) {
+      g.roll.t -= dt;
+      vx = g.roll.x; vy = g.roll.y; mag = 1;
+      g.rolling = true;
+    } else {
+      g.rolling = false;
+      const a = g.analog;
+      if (a && (Math.abs(a.x) > 0.001 || Math.abs(a.y) > 0.001)) {
+        vx = a.x; vy = a.y;
+        mag = Math.min(1, Math.hypot(vx, vy));
+        if (mag > 1) { vx /= mag; vy /= mag; }
+      } else {
+        const h = g.held || {};
+        vx = (h.right ? 1 : 0) - (h.left ? 1 : 0);
+        vy = (h.down ? 1 : 0) - (h.up ? 1 : 0);
+        if (vx && vy) { const k = Math.SQRT1_2; vx *= k; vy *= k; }
+        mag = Math.hypot(vx, vy);
+      }
+    }
+    const moving = mag > 0.08;
     if (moving) g.pdir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
     g.state.player.dir = g.pdir;
 
     const contacts = [];
-    const step = this.SPEED * dt;
+    const step = (g.rolling ? this.ROLL_SPEED : this.SPEED) * dt;
     // corner-assist: pure-cardinal movement funnels you into a gap (doorway
     // or around a block edge) when you're straddling a blocked/open pair —
     // the Link's-Awakening feel that keeps you from bonking every doorframe
@@ -101,7 +124,7 @@ const FM = {
     if (vy) this._axis(g, 0, vy * step, contacts);
 
     g.pmoving = moving;
-    if (moving) g.walkPhase = (g.walkPhase || 0) + step;
+    if (moving) g.walkPhase = (g.walkPhase || 0) + step * mag;
 
     this._contacts(g, contacts, dt, events);
     this._cell(g, events);
@@ -196,6 +219,38 @@ const FM = {
     const k = Math.min(1, dt * this.ALIGN);
     if (ct.dir === 'e' || ct.dir === 'w') g.py += (ct.r + 0.5 - g.py) * k;
     else g.px += (ct.c + 0.5 - g.px) * k;
+  },
+
+  DIR_VEC: { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] },
+  DIR_SIDE: { up: 'n', down: 's', left: 'w', right: 'e' },
+
+  // sword swing (attack button): plays a swing pose and, if we're facing an
+  // adjacent bush with a sword, cuts it — the same tested engine path used when
+  // you walk into bramble. This is the hook the combat system will extend to
+  // strike enemies in the facing arc.
+  swing(g) {
+    const events = [];
+    g.swingT = 0.18;
+    const st = g.state;
+    const [dc, dr] = this.DIR_VEC[g.pdir] || [0, 1];
+    const tr = Math.floor(g.py) + dr, tc = Math.floor(g.px) + dc;
+    const facingBush = st.tiles[tr] && st.tiles[tr][tc] === TILE.BUSH;
+    if (facingBush && g.inventory().sword) {
+      const { res, before } = this._act(g, this.DIR_SIDE[g.pdir]);
+      if (res.ok && res.events.some(e => e.type === 'cut')) { g._pushHistory(before); g.state = res.state; g.pushT = 0; events.push(...res.events); }
+    }
+    return events;
+  },
+
+  // dodge roll (action button): a quick burst in the current heading. Movement
+  // still runs through _axis, so walls/blocks stop the roll like any motion.
+  roll_(g) {
+    if (g.roll && g.roll.t > 0) return false;            // already rolling
+    const [dc, dr] = this.DIR_VEC[g.pdir] || [0, 1];
+    const len = Math.hypot(dc, dr) || 1;
+    g.roll = { x: dc / len, y: dr / len, t: this.ROLL_T };
+    g.swingT = 0;
+    return true;
   },
 
   // interactions with the tile under the player's centre

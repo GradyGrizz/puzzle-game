@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/22/2026 5:44pm (mst)';
+const BUILD_STAMP = '7/22/2026 11:56pm (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -430,6 +430,7 @@ const ScreenSettings = {
     rows.push({ type: 'toggle', label: 'HAPTICS', get: () => s.haptics, set: v => { s.haptics = v; Save.write(); if (v) Platform.haptic(); } });
     rows.push({ type: 'toggle', label: 'REDUCED FLASH', get: () => s.reducedFlash, set: v => { s.reducedFlash = v; Save.write(); } });
     rows.push({ type: 'toggle', label: 'TUTORIAL TIPS', get: () => s.tips !== false, set: v => { s.tips = v; Save.write(); } });
+    rows.push({ type: 'button', label: 'CONTROLS', action: () => { Snd.select(); App.setScreen('controls'); } });
     rows.push({ type: 'button', label: 'REPLAY INTRO', action: () => { Snd.select(); App.setScreen('intro'); } });
     rows.push({ type: 'header', label: 'ACCOUNT' });
     rows.push({ type: 'button', label: this.confirmWipe ? 'TAP AGAIN TO ERASE ALL' : 'RESET PROGRESS', danger: true, action: () => this._reset() });
@@ -616,6 +617,50 @@ const ScreenSettings = {
     }
   },
   onBack() { Snd.back(); App.setScreen('menu'); },
+};
+
+// ══ CONTROLS (reachable from SETTINGS) ════════════════════════
+const ScreenControls = {
+  t: 0,
+  enter() { this.t = 0; this._build(); },
+  _build() {
+    const scheme = Save.data.settings.controlScheme || 'joystick';
+    const items = [
+      {
+        label: 'MOVEMENT: ' + (scheme === 'dpad' ? 'D-PAD' : 'JOYSTICK'),
+        sub: scheme === 'dpad' ? 'FIXED 8-WAY DIRECTION PAD' : 'FLOATING ANALOG STICK - TOUCH & DRAG',
+        icon: 'play',
+        action: () => this._toggleScheme(),
+      },
+      { label: 'BACK', action: () => { Snd.back(); App.setScreen('settings'); } },
+    ];
+    this.list = new MenuList(items);
+    if (this._sel != null) this.list.sel = Math.min(this._sel, items.length - 1);
+  },
+  _toggleScheme() {
+    const cur = Save.data.settings.controlScheme || 'joystick';
+    Save.data.settings.controlScheme = cur === 'dpad' ? 'joystick' : 'dpad';
+    Save.write();
+    App.applyControlScheme();
+    Snd.select();
+    this._sel = this.list.sel;
+    this._build();
+  },
+  update(dt) { this.t += dt; },
+  draw(ctx, W, H) {
+    drawBackdrop(ctx, W, H, this.t);
+    const s = Math.max(2, Math.floor(W / 240));
+    drawText(ctx, 'CONTROLS', W / 2, 34, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, 'CHOOSE HOW YOU MOVE', W / 2, 34 + 8 * (s + 1) + 6, 1, PAL.uiDim, 'center');
+    const iw = Math.min(W - 40, 380);
+    this.list.draw(ctx, W / 2, Math.max(112, H * 0.22), iw, 40 + s * 8, s, this.t);
+    drawText(ctx, '◀ BACK', 16, 12, s, PAL.uiDim, 'left');
+  },
+  onDirPress(dc, dr) { if (dr) { this.list.nav(dr); this._sel = this.list.sel; } },
+  onDirRelease() {},
+  onConfirm() { this._sel = this.list.sel; this.list.activate(); },
+  onTap(x, y) { if (y < 40 && x < 110) { this.onBack(); return; } this._sel = this.list.sel; this.list.tapAt(x, y); },
+  onBack() { Snd.back(); App.setScreen('settings'); },
 };
 
 // ══ DEV TOOLS (reachable from the DEVELOPER MODE section) ═════

@@ -93,6 +93,9 @@ const ScreenGame = {
     this.roomTrans = null;
     // ── free-movement (Link's Awakening style) ──
     this.held = { up: false, down: false, left: false, right: false };
+    this.analog = { x: 0, y: 0 };          // floating-joystick vector (−1..1)
+    this.roll = null; this.swingT = 0;     // dodge roll + sword swing anim
+    this.stick = null;                     // active floating-joystick touch {ox,oy,x,y}
     this.px = 1.5; this.py = 1.5; this.pdir = 'down';
     this.pmoving = false; this.walkPhase = 0; this.pframe = 0;
     this.pushT = 0; this.pushGrace = 0; this.pushDir = null; this.blockSlide = null;
@@ -451,6 +454,46 @@ const ScreenGame = {
   onDirRelease(dc, dr) {
     if (dc < 0) this.held.left = false; else if (dc > 0) this.held.right = false;
     if (dr < 0) this.held.up = false; else if (dr > 0) this.held.down = false;
+  },
+
+  // ── floating joystick (analog movement) ──
+  STICK_R: 46,   // px from origin at which the knob = full tilt
+  onStickDown(x, y) {
+    if ((Save.data.settings.controlScheme || 'joystick') !== 'joystick' || this.mode !== 'play') return false;
+    const W = App.W, H = App.H - App.safeTop;
+    if (x > W * 0.56 || y < H * 0.26) return false;   // right side + top reserved for buttons/HUD
+    this.stick = { ox: x, oy: y, x, y, kx: x, ky: y };
+    this._updateAnalog();
+    return true;
+  },
+  onStickMove(x, y) { if (this.stick) { this.stick.x = x; this.stick.y = y; this._updateAnalog(); } },
+  onStickEnd() { this.stick = null; this.analog.x = 0; this.analog.y = 0; },
+  _updateAnalog() {
+    const s = this.stick;
+    if (!s) { this.analog.x = 0; this.analog.y = 0; return; }
+    let dx = s.x - s.ox, dy = s.y - s.oy;
+    const d = Math.hypot(dx, dy);
+    if (d < 5) { this.analog.x = 0; this.analog.y = 0; s.kx = s.ox; s.ky = s.oy; return; }
+    const cl = Math.min(d, this.STICK_R), nx = dx / d, ny = dy / d;
+    s.kx = s.ox + nx * cl; s.ky = s.oy + ny * cl;
+    const mag = cl / this.STICK_R;
+    this.analog.x = nx * mag; this.analog.y = ny * mag;
+  },
+
+  // ── right-thumb buttons ──
+  onAttack() {
+    if (this.mode === 'dialog') return this._advanceDialog();
+    if (this.mode === 'chest') return this._advanceChest();
+    if (this.mode !== 'play') return;
+    if (Snd.swing) Snd.swing();
+    const evs = FM.swing(this);
+    if (evs && evs.length) this._handleFreeEvents(evs);
+  },
+  onAction() {
+    if (this.mode === 'dialog') return this._advanceDialog();
+    if (this.mode === 'chest') return this._advanceChest();
+    if (this.mode !== 'play') return;
+    if (FM.roll_(this)) { if (Snd.roll) Snd.roll(); Platform.haptic('light'); }
   },
 
   onConfirm() {
@@ -918,6 +961,7 @@ const ScreenGame = {
     this.drawHud(ctx, W, H, hudH);
     // the minimap only appears once you've claimed this dungeon's MAP chest
     if (this.gameMode === 'story' && this.mapFound && this.mode !== 'gear') this.drawMinimap(ctx, W, H, hudH);
+    this._drawStick(ctx);
 
     if (this.toast) {
       let s = 2;
@@ -1016,6 +1060,24 @@ const ScreenGame = {
       ctx.fillRect(cx, cy, cell, cell);
       if (cur) { ctx.fillStyle = '#2a1c02'; ctx.fillRect(cx + (cell >> 1) - 1, cy + (cell >> 1) - 1, 3, 3); }
     }
+  },
+
+  // floating analog joystick — drawn where the thumb first touched down
+  _drawStick(ctx) {
+    const s = this.stick;
+    if (!s || this.mode !== 'play') return;
+    const R = this.STICK_R;
+    ctx.save();
+    // base ring
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(230,190,60,0.35)';
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.beginPath(); ctx.arc(s.ox, s.oy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // knob
+    ctx.fillStyle = 'rgba(230,190,60,0.55)';
+    ctx.strokeStyle = 'rgba(240,210,90,0.85)';
+    ctx.beginPath(); ctx.arc(s.kx, s.ky, R * 0.44, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
   },
 
   drawHud(ctx, W, H, hudH) {

@@ -158,6 +158,8 @@ const Snd = {
   // bright descending arpeggio run (that fast doo-doo-doo-doo down the scale)
   door()      { [1319, 1047, 880, 698, 523].forEach((f, i) => this.tone(f, 0.065, 'square', 0.13, this.now(i * 0.03))); },
   cut()       { this.noise(0.10, 0.14, 0, 1600); this.tone(240, 0.08, 'sawtooth', 0.07); },
+  swing()     { this.noise(0.09, 0.08, 0, 2200); this.tone(520, 0.07, 'square', 0.05, 0, 300); },
+  roll()      { this.noise(0.16, 0.07, 0, 500); this.tone(180, 0.14, 'sine', 0.10, 0, 90); },
   snuff()     { this.noise(0.22, 0.12, 0, 900); this.tone(180, 0.18, 'sine', 0.10, 0, 60); },
   crack()     { this.noise(0.14, 0.16, 0, 500); this.tone(150, 0.1, 'square', 0.08, 0, 60); },
   fall()      { this.tone(300, 0.35, 'square', 0.13, 0, 55); },

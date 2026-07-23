@@ -57,7 +57,8 @@ body.framed #device::before {
 }
 #controls {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
+  left: 0; right: 0; top: 0; bottom: 0;   /* full-device overlay so top-anchored
+                                             buttons measure from the top */
   padding-bottom: max(14px, env(safe-area-inset-bottom));
   display: none;
   z-index: 10;
@@ -115,6 +116,48 @@ body.no-relics .acts-left { display: none; }
   0%,100% { border-color: rgba(210,170,50,0.55); background: rgba(200,160,40,0.12); }
   50%     { border-color: rgba(240,200,80,0.95); background: rgba(220,180,60,0.30); }
 }
+/* ── right-thumb combat buttons (joystick scheme only) ── */
+.combat {
+  position: absolute;
+  right: 16px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  width: 156px; height: 150px;
+  display: none;
+  pointer-events: none;
+}
+.cbtn {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.07);
+  border: 2px solid rgba(255,255,255,0.15);
+  color: rgba(230,190,60,0.9);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: auto; cursor: pointer;
+  -webkit-user-select: none;
+  transition: background 0.07s, border-color 0.07s;
+}
+.cbtn:active { background: rgba(200,160,40,0.30); border-color: rgba(240,200,80,0.95); }
+.cbtn .ab-ico { font-size: 26px; line-height: 1; }
+.cbtn .ab-lbl { font-size: 9px; letter-spacing: 1px; margin-top: 1px; opacity: 0.85; }
+#btn-sword { width: 86px; height: 86px; right: 0; bottom: 0; }
+#btn-sword .ab-ico { font-size: 34px; }
+#btn-act   { width: 62px; height: 62px; right: 92px; bottom: 20px; }
+/* scheme switching: joystick hides the d-pad + shows combat buttons and
+   tucks the puzzle utilities into compact columns up the screen edges */
+body.scheme-joystick .dpad { display: none; }
+body.scheme-joystick .combat { display: block; }
+body.scheme-dpad .combat { display: none; }
+body.scheme-joystick .acts {
+  top: 92px; bottom: auto; right: 8px; gap: 7px;
+}
+body.scheme-joystick .acts .ab { width: 48px; height: 30px; font-size: 9px; }
+body.scheme-joystick .acts-left {
+  top: 92px; bottom: auto; left: 8px; gap: 7px;
+}
+body.scheme-joystick .acts-left .ab.gear { width: 48px; height: 40px; }
+body.scheme-joystick .acts-left .ab .ab-ico { font-size: 16px; }
+body.scheme-joystick .acts-left .ab .ab-lbl { font-size: 8px; }
 </style>
 </head>
 <body>
@@ -135,6 +178,10 @@ body.no-relics .acts-left { display: none; }
     <div class="ab" id="btn-hint" aria-label="Hint">HINT</div>
     <div class="ab" id="btn-undo" aria-label="Undo">UNDO</div>
     <div class="ab" id="btn-reset" aria-label="Reset">RESET</div>
+  </div>
+  <div class="combat">
+    <div class="cbtn" id="btn-act" aria-label="Roll"><span class="ab-ico">&raquo;</span><span class="ab-lbl">ROLL</span></div>
+    <div class="cbtn" id="btn-sword" aria-label="Sword"><span class="ab-ico">&#9876;</span><span class="ab-lbl">SWORD</span></div>
   </div>
 </div>
 </div>
