@@ -125,6 +125,9 @@ function easeOutBounce(x) {
 // Retro startup sequence (Pokémon-ish): the DELVE logo drops in from the
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
+// build stamp — bump this to the deploy time on each update
+const BUILD_STAMP = '7/22/2026 6:32pm (mst)';
+
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
   t: 0, heroX: -80, frame: 0, landed: false, shineT: -1, shake: 0,
@@ -184,6 +187,7 @@ const ScreenTitle = {
     ctx.fillStyle = 'rgba(2,3,6,0.35)'; ctx.fillRect(0, stripY, W, ts);
     Art.hero(ctx, 'right', this.frame, this.heroX, stripY - 8, ts, false);
     drawText(ctx, 'A DUNGEON PUZZLE', W / 2, H - 40, 1, PAL.uiDim, 'center');
+    drawText(ctx, 'UPDATED ' + BUILD_STAMP, W / 2, H - 14, 1, PAL.uiDim, 'center');
     ctx.restore();
     if (rev >= 1 && Math.floor(this.t * 1.6) % 2 === 0) {
       drawText(ctx, 'TAP TO BEGIN', W / 2, H * 0.76, Math.max(2, s - 1), PAL.ui, 'center', '#000');
