@@ -138,6 +138,13 @@ body.no-relics .acts-left { display: none; }
   transition: background 0.07s, border-color 0.07s;
 }
 .cbtn:active { background: rgba(200,160,40,0.30); border-color: rgba(240,200,80,0.95); }
+.cbtn.locked {
+  opacity: 0.28;
+  filter: grayscale(1);
+  border-color: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.24);
+}
+.cbtn.locked:active { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
 .cbtn .ab-ico { font-size: 26px; line-height: 1; }
 .cbtn .ab-lbl { font-size: 9px; letter-spacing: 1px; margin-top: 1px; opacity: 0.85; }
 #btn-sword { width: 86px; height: 86px; right: 0; bottom: 0; }
