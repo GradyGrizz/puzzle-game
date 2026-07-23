@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/23/2026 10:46am (mst)';
+const BUILD_STAMP = '7/23/2026 2:55pm (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -276,6 +276,7 @@ const ScreenMenu = {
       { label: 'TIMED RUSH', sub: 'RACE THE CLOCK', icon: 'clock', action: () => App.setScreen('timed') },
       { label: 'SHOP', sub: 'SPEND YOUR COINS', icon: 'cart', action: () => App.setScreen('shop') },
       { label: 'SETTINGS', icon: 'gear', action: () => App.setScreen('settings') },
+      { label: 'TEST DUNGEON', sub: 'ALL SYSTEMS TESTING GROUND', icon: 'sword', action: () => App.setScreen('game', { gameMode: 'test' }) },
     );
     this.list = new MenuList(items);
   },
@@ -292,7 +293,9 @@ const ScreenMenu = {
     ctx.fillRect(Math.round(W / 2 - uw / 2), 38 + 8 * ts + 4, uw, 3);
     coinsBadge(ctx, W - 16, 16, Save.data.coins, Math.max(2, s - 1));
     const iw = Math.min(W - 40, 360);
-    this.list.draw(ctx, W / 2, Math.max(84, H * 0.20), iw, 26 + s * 8, s, this.t);
+    const menuY = Math.max(80, H * 0.19);
+    const itemH = Math.max(28, Math.min(26 + s * 8, Math.floor((H - menuY - 12 - (this.list.items.length - 1) * 10) / this.list.items.length)));
+    this.list.draw(ctx, W / 2, menuY, iw, itemH, s, this.t);
   },
   onDirPress(dc, dr) { if (dr) this.list.nav(dr); },
   onDirRelease() {},

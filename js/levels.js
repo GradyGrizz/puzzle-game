@@ -196,6 +196,47 @@ const DUNGEONS = [
   },
 ];
 
+// 30x15 isolated development arena. It is intentionally not part of
+// DUNGEONS, so story unlocks, completion records and rewards never see it.
+function buildTestMap() {
+  const w = 30, h = 15;
+  const g = Array.from({ length: h }, (_, r) =>
+    Array.from({ length: w }, (_, c) => (r === 0 || r === h - 1 || c === 0 || c === w - 1) ? '#' : '.'));
+  const put = (r, c, ch) => { g[r][c] = ch; };
+  for (let r = 1; r < h - 1; r++) {
+    if (r !== 4 && r !== 10) { put(r, 10, '#'); put(r, 20, '#'); }
+  }
+  put(2, 2, '@'); put(2, 4, 'o'); put(2, 6, 'k'); put(3, 3, 'b');
+  put(3, 6, 's'); put(5, 3, 'h'); put(5, 6, 's'); put(7, 3, 'b');
+  put(7, 5, 'p'); put(9, 3, 'c'); put(11, 5, 'd'); put(12, 7, 'x');
+  for (let c = 12; c <= 18; c += 2) put(2, c, 'u');
+  for (let c = 12; c <= 18; c += 2) put(5, c, 'f');
+  for (let c = 12; c <= 18; c += 2) put(8, c, 'p');
+  put(11, 12, 'C'); put(11, 15, 'o'); put(11, 18, 'k');
+  put(0, 13, 'T'); put(0, 17, 'T');
+  for (let c = 22; c <= 27; c++) put(7, c, '#');
+  put(7, 24, '.'); put(7, 27, '.');
+  for (let r = 2; r <= 5; r++) put(r, 25, r === 4 ? '.' : '#');
+  return g.map(row => row.join(''));
+}
+
+const TEST_DUNGEON = {
+  id: 'test-ground', name: 'TEST DUNGEON', map: buildTestMap(),
+  chest: { item: 'sword' },
+  zones: [
+    { c: 2, r: 1, text: 'PUZZLES' },
+    { c: 12, r: 1, text: 'HAZARDS + RELICS' },
+    { c: 22, r: 1, text: 'COMBAT' },
+    { c: 22, r: 9, text: 'DART LANE' },
+  ],
+  darkZones: [{ c: 11, r: 9, w: 9, h: 4 }],
+  enemies: [
+    { id: 'skeleton-a', type: 'skeleton', r: 3, c: 22 },
+    { id: 'skeleton-b', type: 'skeleton', r: 5, c: 27 },
+    { id: 'dart-a', type: 'dart', r: 10, c: 23 },
+    { id: 'dart-b', type: 'dart', r: 12, c: 27 },
+  ],
+};
 // ── helpers ───────────────────────────────────────────────────
 function allDungeons() { return DUNGEONS; }
 function getDungeon(id) { return DUNGEONS.find(d => d.id === id) || null; }
@@ -210,10 +251,10 @@ function isDungeonUnlocked(id, save) {
 function roomCount(dun) { return Object.keys(dun.rooms).length; }
 
 if (typeof module !== 'undefined') {
-  module.exports = { DUNGEONS, ITEMS, allDungeons, getDungeon, nextDungeon, isDungeonUnlocked, roomCount };
+  module.exports = { DUNGEONS, TEST_DUNGEON, ITEMS, allDungeons, getDungeon, nextDungeon, isDungeonUnlocked, roomCount };
 }
 if (typeof window !== 'undefined') {
-  window.DUNGEONS = DUNGEONS; window.ITEMS = ITEMS;
+  window.DUNGEONS = DUNGEONS; window.TEST_DUNGEON = TEST_DUNGEON; window.ITEMS = ITEMS;
   window.allDungeons = allDungeons; window.getDungeon = getDungeon;
   window.nextDungeon = nextDungeon; window.isDungeonUnlocked = isDungeonUnlocked;
   window.roomCount = roomCount;

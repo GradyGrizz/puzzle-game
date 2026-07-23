@@ -1,6 +1,7 @@
 'use strict';
 // ── Game screen: plays one puzzle level with anims + sfx ──────
-// Supports three game modes:
+// Supports four game modes:
+//   test      — isolated all-systems combat and puzzle testing ground
 //   story     — handcrafted campaign levels with dialogs/chests
 //   challenge — endless generated depths with a move budget
 //   timed     — 5-stage generated gauntlet against the clock
@@ -16,6 +17,7 @@ const ScreenGame = {
     this.gameMode = params.gameMode || 'story';
     this.run = params.run || null;
     this.dungeon = null;
+    this.combatDefeated = {};
 
     if (this.gameMode === 'story') {
       // multi-room dungeon
@@ -39,6 +41,11 @@ const ScreenGame = {
         this.introShown = true;
       }
       return;
+    } else if (this.gameMode === 'test') {
+      this.lv = TEST_DUNGEON;
+      this.levelId = TEST_DUNGEON.name;
+      this.firstTime = false;
+      this.budget = 0;
     } else if (this.gameMode === 'challenge') {
       let g = App.pregen && App.pregen.depth === this.run.depth && App.pregen.seed === this.run.seed
         ? App.pregen.gen : genLevel(this.run.depth, this.run.seed);
@@ -59,6 +66,7 @@ const ScreenGame = {
     this.state = parseLevel(this.lv);
     this._initStoryFields();
     this._setPlayerCell(this.state.player.r, this.state.player.c);
+    this._startCombat(this.lv.enemies || [], this.gameMode === 'test' ? 'test' : this.levelId);
     Snd.playMusic(this.state.dark ? 'deep' : 'dungeon');
   },
 
@@ -102,9 +110,10 @@ const ScreenGame = {
     this.pushT = 0; this.pushGrace = 0; this.pushDir = null; this.blockSlide = null;
     this.steps = 0; this._lastTile = null; this._entryCell = null;
     this._needToastT = 0;
+    this.combat = null; this.deathT = 0;
     const hintBtn = document.getElementById('btn-hint');
     if (hintBtn) hintBtn.style.display = this.gameMode === 'story' ? 'flex' : 'none';
-    document.body.classList.toggle('no-relics', this.gameMode !== 'story');
+    document.body.classList.toggle('no-relics', this.gameMode !== 'story' && this.gameMode !== 'test');
     this._pulseGear(false);
   },
 
@@ -137,6 +146,7 @@ const ScreenGame = {
     this.anim = null; this.heldDir = null; this.queued = null;
     this.blockSlide = null; this.pushT = 0;
     this._setPlayerCell(st.player.r, st.player.c);
+    this._startCombat(room.enemies || [], roomId);
     const song = st.dark ? 'deep' : 'dungeon';
     if (song !== this._song) { Snd.playMusic(song); this._song = song; }
   },
@@ -285,8 +295,8 @@ const ScreenGame = {
     this._pulseGear(false);
     Snd.select();
   },
-  onGear() { if (this.mode === 'gear') GearUI.setTab(this, 'equipment'); else this._openGear('equipment'); },
-  onBag() { if (this.mode === 'gear') GearUI.setTab(this, 'inventory'); else this._openGear('inventory'); },
+  onGear() { if (this.gameMode === 'test') { this.showToast('ALL TEST RELICS ARE ACTIVE.'); return; } if (this.mode === 'gear') GearUI.setTab(this, 'equipment'); else this._openGear('equipment'); },
+  onBag() { if (this.gameMode === 'test') { this.showToast('TEST INVENTORY IS ISOLATED.'); return; } if (this.mode === 'gear') GearUI.setTab(this, 'inventory'); else this._openGear('inventory'); },
   _closeGear() {
     this.mode = 'play';
     this.heldDir = null;
@@ -304,7 +314,62 @@ const ScreenGame = {
 
   // gameplay abilities come from EQUIPPED relics, not merely owned ones —
   // you must equip the blade before it cuts, the shield before it wards
-  inventory() { return Save.data.story.equipped; },
+  inventory() {
+    if (this.gameMode === 'test') return { sword: true, shield: true, glove: true, lantern: true, boots: true };
+    return Save.data.story.equipped;
+  },
+
+  _startCombat(spawns, key, reset) {
+    this.combatKey = key || 'room';
+    if (reset || !this.combatDefeated[this.combatKey]) this.combatDefeated[this.combatKey] = {};
+    this.combat = Combat.create(spawns, this.combatDefeated[this.combatKey]);
+    this.deathT = 0;
+  },
+
+  _combatWorld() {
+    const solid = (x, y, half) => {
+      const pts = [[x - half, y - half], [x + half, y - half], [x - half, y + half], [x + half, y + half]];
+      return pts.some(([px, py]) => {
+        const r = Math.floor(py), c = Math.floor(px);
+        if (r < 0 || c < 0 || r >= this.state.h || c >= this.state.w) return true;
+        const t = this.state.tiles[r][c];
+        return t === TILE.WALL || t === TILE.PIT || t === TILE.FIRE || t === TILE.BUSH ||
+          t === TILE.DOOR || t === TILE.EXIT || !!blockAt(this.state, r, c) ||
+          !!(this.state.chest && !this.state.chest.opened && this.state.chest.r === r && this.state.chest.c === c);
+      });
+    };
+    return {
+      solid,
+      lineClear: (x1, y1, x2, y2) => {
+        const d = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.ceil(d / 0.2));
+        for (let i = 1; i < n; i++) if (solid(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, 0.08)) return false;
+        return true;
+      },
+    };
+  },
+
+  _handleCombatEvents(events) {
+    for (const ev of events) {
+      if (ev.type === 'enemyHit') { if (Snd.enemyHit) Snd.enemyHit(); Platform.haptic('light'); }
+      else if (ev.type === 'enemyDead') {
+        this.combatDefeated[this.combatKey][ev.enemy.id] = true;
+        if (Snd.enemyDown) Snd.enemyDown();
+      } else if (ev.type === 'dartFired') { if (Snd.dart) Snd.dart(); }
+      else if (ev.type === 'dartImpact') { if (Snd.dartHit) Snd.dartHit(); }
+      else if (ev.type === 'playerHit') {
+        if (Snd.playerHit) Snd.playerHit();
+        Platform.haptic('heavy');
+        const contacts = [];
+        FM._axis(this, ev.dx * 0.28, 0, contacts);
+        FM._axis(this, 0, ev.dy * 0.28, contacts);
+      } else if (ev.type === 'playerDead') {
+        this.mode = 'dead'; this.deathT = 0;
+        this.held = { up: false, down: false, left: false, right: false };
+        this.analog = { x: 0, y: 0 };
+        if (Snd.playerDown) Snd.playerDown();
+      }
+    }
+  },
 
   movesLeft() { return this.budget ? Math.max(0, this.budget - (this.steps || 0)) : null; },
 
@@ -350,7 +415,10 @@ const ScreenGame = {
       Snd.chestOpen();
       return true;
     }
-    if (has('win')) { this.mode = 'won'; this.wonT = 0; Snd.fanfare(); Platform.haptic('heavy'); return true; }
+    if (has('win')) {
+      if (this.gameMode === 'test') { this.showToast('EXIT TEST PASSED. USE MENU TO LEAVE.'); Snd.fanfare(); }
+      else { this.mode = 'won'; this.wonT = 0; Snd.fanfare(); Platform.haptic('heavy'); return true; }
+    }
     const door = evs.find(e => e.type === 'door');
     if (door) { this._beginRoomTransition(door.side); return true; }
     return false;
@@ -507,6 +575,7 @@ const ScreenGame = {
     if (this.mode === 'chest') return this._advanceChest();
     if (this.mode !== 'play') return;
     if (Snd.swing) Snd.swing();
+    if (this.combat && this.inventory().sword) Combat.startAttack(this.combat);
     const evs = FM.swing(this);
     if (evs && evs.length) this._handleFreeEvents(evs);
   },
@@ -582,6 +651,8 @@ const ScreenGame = {
       App.setScreen('challenge');
     } else if (this.gameMode === 'timed') {
       App.setScreen('timed');
+    } else if (this.gameMode === 'test') {
+      App.setScreen('menu');
     } else {
       App.setScreen('story');
     }
@@ -614,6 +685,8 @@ const ScreenGame = {
     this._setPlayerCell(e.r, e.c);
     this.filled = {};
     this.exitGlow = 0;
+    const combatSpawns = this.gameMode === 'test' ? (this.lv.enemies || []) : (this.gameMode === 'story' ? (this.dungeon.rooms[this.roomId].enemies || []) : []);
+    this._startCombat(combatSpawns, this.gameMode === 'test' ? 'test' : this.roomId, true);
     Snd.back();
   },
   _recomputeFilled() {
@@ -639,6 +712,9 @@ const ScreenGame = {
     const ca = this.chestAnim;
     if (!ca || ca.phase < 2) return;
     const item = ca.item;
+    if (this.gameMode === 'test') {
+      this.chestAnim = null; this.mode = 'play'; this.showToast('CHEST TEST PASSED — SAVE UNCHANGED.'); Snd.itemGet(); return;
+    }
     // the dungeon map is per-dungeon knowledge, not a global relic
     if (item === 'map') { Save.grantDungeonMap(this.dungeon.id); this.mapFound = true; }
     else Save.grantItem(item);
@@ -823,6 +899,11 @@ const ScreenGame = {
     if (this.mode === 'play') {
       const evs = FM.update(this, dt);
       if (evs.length && this._handleFreeEvents(evs)) return;   // mode may have changed
+      if (this.combat) {
+        const combatEvents = Combat.update(this.combat, this._combatWorld(), { x: this.px, y: this.py, dir: this.pdir, rolling: !!this.rolling }, dt);
+        if (combatEvents.length) this._handleCombatEvents(combatEvents);
+        if (this.mode !== 'play') return;
+      }
       // latch this room as solved the first time every switch is covered, so its
       // shutter doors stay open even after the blocks are reset on re-entry
       if (this.gameMode === 'story' && !this.solved[this.roomId] && Dungeon.roomSolved(this.state)) this.solved[this.roomId] = true;
@@ -832,6 +913,12 @@ const ScreenGame = {
       if (shoving) this.pframe = 1 + Math.floor(this.t * 5) % 4;
       else this.pframe = this.pmoving ? (1 + Math.floor(this.walkPhase * 5) % 4) : 0;
       if (this.gameMode === 'challenge' && this.movesLeft() === 0) { this._runOver(); return; }
+    }
+
+    if (this.mode === 'dead') {
+      this.deathT += dt;
+      if (this.deathT >= 1.15) { this.mode = 'play'; this.onReset(); }
+      return;
     }
 
     if (this.mode === 'chest' && this.chestAnim) {
@@ -946,7 +1033,12 @@ const ScreenGame = {
     // gate keeps the pose from lingering when you turn or stop.
     const pushing = !!this.blockSlide || (this.pushGrace > 0 && this.pmoving && this.pushDir === this.pdir);
     const idle = !this.pmoving && !pushing;
+    Combat.render(this.combat, ctx, this._board, this.t);
+    ctx.save();
+    if (this.combat && this.combat.playerInvuln > 0 && Math.floor(this.t * 18) % 2) ctx.globalAlpha = 0.35;
     Art.hero(ctx, this.pdir, this.pframe, Math.round(bx + hc * T), Math.round(by + hr * T), T, pushing, idle);
+    ctx.restore();
+    this._drawPlayerAttack(ctx);
 
     // darkness: a lit circle only when the PALE LANTERN is equipped;
     // otherwise the dark closes in and nudges you to the gear screen
@@ -966,6 +1058,8 @@ const ScreenGame = {
       ctx.fillStyle = 'rgba(240,200,110,0.045)';
       ctx.fillRect(bx + (hc - 1.5) * T, by + (hr - 1.5) * T, T * 4, T * 4);
     }
+
+    if (this.gameMode === 'test') this._drawTestOverlays(ctx, W, H);
 
     // hint arrows
     if (this.hintPath) {
@@ -1005,6 +1099,11 @@ const ScreenGame = {
       drawTextFit(ctx, this.toast.text, W / 2, ty + 8, tw - 16, s, PAL.goldHi, 'center');
     }
 
+    if (this.mode === 'dead') {
+      ctx.fillStyle = 'rgba(40,2,4,0.64)'; ctx.fillRect(0, 0, W, H);
+      drawText(ctx, 'YOU FELL', W / 2, H * 0.38, 5, '#ff6b5c', 'center', '#220000');
+      drawText(ctx, 'RESTARTING...', W / 2, H * 0.55, 2, PAL.ui, 'center');
+    }
     if (this.mode === 'dialog') this.drawDialog(ctx, W, H);
     if (this.mode === 'chest') this.drawChest(ctx, W, H);
     if (this.mode === 'won') {
@@ -1026,6 +1125,36 @@ const ScreenGame = {
     }
   },
 
+  _drawPlayerAttack(ctx) {
+    if (!this.combat || !this.combat.attack || !this._board) return;
+    const a = this.combat.attack;
+    if (a.t < Combat.ATTACK_ACTIVE * 0.45 || a.t > Combat.ATTACK_DURATION) return;
+    const b = this._board, cx = b.bx + this.px * b.T, cy = b.by + this.py * b.T;
+    const ang = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[this.pdir] || 0;
+    const sweep = Math.min(1, a.t / Combat.ATTACK_DURATION);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang - 0.8 + sweep * 1.6);
+    ctx.strokeStyle = '#fff2a8'; ctx.lineWidth = Math.max(3, b.T / 9);
+    ctx.beginPath(); ctx.moveTo(b.T * 0.18, 0); ctx.lineTo(b.T * 0.82, 0); ctx.stroke();
+    ctx.strokeStyle = '#80652c'; ctx.lineWidth = Math.max(2, b.T / 15);
+    ctx.beginPath(); ctx.moveTo(b.T * 0.10, -b.T * 0.12); ctx.lineTo(b.T * 0.10, b.T * 0.12); ctx.stroke();
+    ctx.restore();
+  },
+  _drawTestOverlays(ctx) {
+    const def = this.lv, b = this._board;
+    if (!def || !b) return;
+    if (def.darkZones) {
+      for (const z of def.darkZones) for (let r = z.r; r < z.r + z.h; r++) for (let c = z.c; c < z.c + z.w; c++) {
+        const d = Math.max(Math.abs(r + 0.5 - this.py), Math.abs(c + 0.5 - this.px));
+        const radius = this.inventory().lantern ? 2.4 : 0.55;
+        const a = Math.min(0.88, Math.max(0.12, (d - radius) * 0.42));
+        ctx.fillStyle = `rgba(1,2,4,${a})`;
+        ctx.fillRect(b.bx + c * b.T, b.by + r * b.T, b.T, b.T);
+      }
+    }
+    for (const z of def.zones || []) {
+      drawTextFit(ctx, z.text, b.bx + z.c * b.T, b.by + z.r * b.T + 2, Math.min(9 * b.T, 150), 1, PAL.goldHi, 'left', '#000');
+    }
+  },
   drawPause(ctx, W, H) {
     // heavier dim in timed mode so pausing can't be used to study the board
     ctx.fillStyle = this.gameMode === 'timed' ? 'rgba(2,3,6,0.93)' : 'rgba(2,3,6,0.66)';
@@ -1126,6 +1255,13 @@ const ScreenGame = {
     // center in the free span between the back button and coins/keys
     const spanL = bxo + bw + 10, spanR = W - (this.state.keys > 0 ? 150 : 108);
     drawTextFit(ctx, title, (spanL + spanR) / 2, 10, spanR - spanL - 6, 2, PAL.ui, 'center', '#000');
+    if (this.combat) {
+      const hp = this.combat.playerHp, maxHp = Combat.PLAYER_MAX_HP;
+      for (let i = 0; i < maxHp; i++) {
+        ctx.fillStyle = i < hp ? '#df4b45' : '#3b2025';
+        ctx.fillRect(spanL + i * 13, 30, 10, 8);
+      }
+    }
     if (this.gameMode === 'challenge') {
       const left = this.movesLeft();
       const urgent = left != null && left <= 5;
