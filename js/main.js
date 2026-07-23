@@ -54,7 +54,7 @@ const App = {
     this.H = dev.clientHeight;
     const probe = document.getElementById('safe-probe');
     this.safeTop = probe ? probe.offsetHeight : 0;
-    if (this.framed) this.safeTop = Math.max(this.safeTop, 26); // reserve notch
+    if (this.framed) this.safeTop = Math.max(this.safeTop, 18); // reserve landscape sensor pill
     this.canvas.width = this.W * dpr;
     this.canvas.height = this.H * dpr;
     this.canvas.style.width = this.W + 'px';
@@ -63,21 +63,20 @@ const App = {
     this.ctx.imageSmoothingEnabled = false;
   },
 
-  // On a mouse-driven, roomy window (i.e. a desktop browser) we shrink the
-  // game into a centred phone-shaped bezel — this is an iPhone/Android game,
-  // so desktop gets a phone preview rather than a stretched full screen.
+  // On a mouse-driven, roomy window, present the game inside a centred
+  // landscape phone bezel. The live mobile viewport also uses landscape.
   _applyFrame() {
     const fine = window.matchMedia('(pointer: fine)').matches;
-    const roomy = window.innerWidth > 620 && window.innerHeight > 560;
+    const roomy = window.innerWidth > 760 && window.innerHeight > 360;
     this.framed = fine && roomy;
     document.body.classList.toggle('framed', this.framed);
     const dev = document.getElementById('device');
     if (!this.framed) { dev.style.width = ''; dev.style.height = ''; return; }
-    const AR = 390 / 844;                      // iPhone-ish portrait aspect
-    let h = Math.min(880, window.innerHeight - 28);
-    let w = Math.round(h * AR);
-    const maxW = window.innerWidth - 28;
-    if (w > maxW) { w = maxW; h = Math.round(w / AR); }
+    const AR = 844 / 390;                      // landscape phone aspect
+    let w = Math.min(920, window.innerWidth - 28);
+    let h = Math.round(w / AR);
+    const maxH = window.innerHeight - 28;
+    if (h > maxH) { h = maxH; w = Math.round(h * AR); }
     dev.style.width = w + 'px';
     dev.style.height = h + 'px';
   },
