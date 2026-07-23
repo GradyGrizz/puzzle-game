@@ -239,8 +239,6 @@ const App = {
       b.addEventListener('touchstart', h, { passive: false });
       b.addEventListener('mousedown', h);
     };
-    bindBtn('btn-undo', () => this.screen && this.screen.onUndo && this.screen.onUndo());
-    bindBtn('btn-reset', () => this.screen && this.screen.onReset && this.screen.onReset());
     bindBtn('btn-hint', () => this.screen && this.screen.onHint && this.screen.onHint());
     bindBtn('btn-gear', () => this.screen && this.screen.onGear && this.screen.onGear());
     bindBtn('btn-bag', () => this.screen && this.screen.onBag && this.screen.onBag());
@@ -266,10 +264,6 @@ const App = {
         if (this.screen && this.screen.onConfirm) this.screen.onConfirm();
       } else if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
         if (this.screen && this.screen.onBack) this.screen.onBack();
-      } else if (e.key === 'u' || e.key === 'U') {
-        if (this.screen && this.screen.onUndo) this.screen.onUndo();
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (this.screen && this.screen.onReset) this.screen.onReset();
       } else if (e.key === 'e' || e.key === 'E') {
         if (this.screen && this.screen.onGear) this.screen.onGear();
       } else if (e.key === 'i' || e.key === 'I') {

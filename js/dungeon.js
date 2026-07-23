@@ -46,11 +46,13 @@ const Dungeon = {
 
   // which sides of `room` are currently passable, given its live state and
   // the set of unlocked lock-doors (keyed "roomId:side")
-  passableSides(dun, roomId, state, unlocked) {
+  passableSides(dun, roomId, state, unlocked, solvedLatch) {
     const room = dun.rooms[roomId];
     const out = {};
     const doors = room.doors || {};
-    const solved = this.roomSolved(state);
+    // a shutter stays open once the room has ever been solved (latched), even
+    // if blocks are later moved back off the switches
+    const solved = !!solvedLatch || this.roomSolved(state);
     for (const side of D_SIDES) {
       const type = doors[side];
       if (!type) continue;

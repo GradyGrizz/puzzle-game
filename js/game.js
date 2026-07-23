@@ -26,6 +26,7 @@ const ScreenGame = {
       this.rooms = {};             // persistent per-room engine states
       this.dkeys = 0;              // shared key pool
       this.unlocked = {};          // "roomId:side" opened lock-doors
+      this.solved = {};            // roomId -> true once its switches were all covered (latched)
       this.visited = {};           // rooms seen (for the map)
       this._introSeen = {};
       this.introShown = false;
@@ -112,9 +113,13 @@ const ScreenGame = {
     const room = this.dungeon.rooms[roomId];
     this.roomId = roomId;
     this.visited[roomId] = true;
-    // restore a persisted room state, or parse it fresh
+    // restore a persisted room state, or parse it fresh. Re-entering a room
+    // resets its block puzzle (blocks + the hazards a block fills/snuffs) back
+    // to the start, but keeps all earned progress — opened chest, taken items,
+    // cut bramble, unlocked doors, and the latched-open exit/shutter doors.
     let st = this.rooms[roomId];
     if (!st) { st = parseLevel({ map: room.map, chest: room.chest || null }); this.rooms[roomId] = st; }
+    else this._resetRoomBlocks(st, room);
     st.dark = !!room.dark;
     st.keys = this.dkeys;
     // place the player: dungeon start, or just inside the entry door
@@ -134,6 +139,22 @@ const ScreenGame = {
     this._setPlayerCell(st.player.r, st.player.c);
     const song = st.dark ? 'deep' : 'dungeon';
     if (song !== this._song) { Snd.playMusic(song); this._song = song; }
+  },
+
+  // reset a room's block puzzle to its authored start, preserving progress.
+  // Blocks return to their original cells and any hazard a block had filled
+  // (pit/crack) or snuffed (fire) is restored, so the puzzle is fresh again.
+  // We deliberately leave cut bramble, unlocked doors and the opened exit as
+  // they were — those are earned and stay done.
+  _resetRoomBlocks(st, room) {
+    const fresh = parseLevel({ map: room.map, chest: room.chest || null });
+    st.blocks = fresh.blocks.map(b => ({ r: b.r, c: b.c, heavy: b.heavy }));
+    for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
+      const f = fresh.tiles[r][c];
+      if (f === TILE.PIT || f === TILE.CRACK || f === TILE.FIRE) st.tiles[r][c] = f;
+    }
+    st.onCrack = false;
+    updateExit(st);   // exit stays open if already latched; never drops
   },
 
   // place the free-moving player at the centre of tile (r,c)
@@ -175,7 +196,7 @@ const ScreenGame = {
         this._unlockDoor(this.roomId, side);
         Snd.doorUnlock();
       } else { Snd.bump(); this.showToast('LOCKED. FIND A KEY.'); return; }
-    } else if (type === 'shutter' && !Dungeon.roomSolved(this.state)) {
+    } else if (type === 'shutter' && !(this.solved[this.roomId] || Dungeon.roomSolved(this.state))) {
       Snd.bump(); this.showToast('SEALED. SOLVE THIS ROOM.'); return;
     }
     this._beginRoomTransition(side);
@@ -199,7 +220,7 @@ const ScreenGame = {
   _doorCells() {
     const room = this.dungeon.rooms[this.roomId];
     const { w, h } = Dungeon.dims(room);
-    const pass = Dungeon.passableSides(this.dungeon, this.roomId, this.state, this.unlocked);
+    const pass = Dungeon.passableSides(this.dungeon, this.roomId, this.state, this.unlocked, this.solved[this.roomId]);
     const out = {};
     for (const side of D_SIDES) {
       const type = room.doors[side];
@@ -225,7 +246,7 @@ const ScreenGame = {
       // a capped-out search means "too deep to see", not "impossible"
       this.showToast(res.reason === 'node-cap'
         ? 'THE SPIRITS CANNOT SEE THAT FAR AHEAD.'
-        : 'NO WAY FORWARD. TRY UNDO OR RESET.');
+        : 'NO WAY FORWARD. LEAVE AND RE-ENTER TO RESET.');
       return;
     }
     Save.useHint();
@@ -530,13 +551,14 @@ const ScreenGame = {
   },
   _buildPauseList(keepSel) {
     const st = Save.data.settings;
-    this.pauseList = new MenuList([
-      { label: 'RESUME', action: () => this._resume() },
-      { label: 'RESTART LEVEL', action: () => { this._resume(); this.onReset(); } },
-      { label: 'MUSIC: ' + (st.music ? 'ON' : 'OFF'), action: () => this._pauseToggle('music') },
-      { label: 'SOUND: ' + (st.sfx ? 'ON' : 'OFF'), action: () => this._pauseToggle('sfx') },
-      { label: 'QUIT', action: () => this._quit() },
-    ]);
+    const items = [{ label: 'RESUME', action: () => this._resume() }];
+    // story rooms reset by leaving and re-entering; the single-room modes have
+    // no other room to walk to, so they keep an explicit restart
+    if (this.gameMode !== 'story') items.push({ label: 'RESTART LEVEL', action: () => { this._resume(); this.onReset(); } });
+    items.push({ label: 'MUSIC: ' + (st.music ? 'ON' : 'OFF'), action: () => this._pauseToggle('music') });
+    items.push({ label: 'SOUND: ' + (st.sfx ? 'ON' : 'OFF'), action: () => this._pauseToggle('sfx') });
+    items.push({ label: 'QUIT', action: () => this._quit() });
+    this.pauseList = new MenuList(items);
     if (keepSel != null) this.pauseList.sel = keepSel;
   },
   _pauseToggle(k) {
@@ -801,6 +823,9 @@ const ScreenGame = {
     if (this.mode === 'play') {
       const evs = FM.update(this, dt);
       if (evs.length && this._handleFreeEvents(evs)) return;   // mode may have changed
+      // latch this room as solved the first time every switch is covered, so its
+      // shutter doors stay open even after the blocks are reset on re-entry
+      if (this.gameMode === 'story' && !this.solved[this.roomId] && Dungeon.roomSolved(this.state)) this.solved[this.roomId] = true;
       // a shove is slow and deliberate ("heavy"): step its frames on a calm,
       // time-based clock rather than the brisk distance-based walk cadence.
       const shoving = !!this.blockSlide || (this.pushGrace > 0 && this.pmoving && this.pushDir === this.pdir);

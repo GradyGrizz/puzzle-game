@@ -80,7 +80,9 @@ function switchesDone(st) {
 function updateExit(st) {
   const was = st.exitOpen;
   const chestDone = !st.chest || st.chest.r < 0 || st.chest.opened;
-  st.exitOpen = switchesDone(st) && chestDone;
+  // latched: once the stairs open (all switches covered + chest claimed) they
+  // stay open — moving a block back off a switch no longer re-seals them.
+  st.exitOpen = st.exitOpen || (switchesDone(st) && chestDone);
   return !was && st.exitOpen;
 }
 
