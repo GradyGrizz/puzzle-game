@@ -613,25 +613,29 @@ _sliceAux(dir, img) {
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
     const d = c.getImageData(0, 0, W, H).data, A = (x, y) => d[(y * W + x) * 4 + 3];
+    // hair = brown pixels only (tracks the head): excludes the green tunic and
+    // the bright-gold arm/torch, whose sideways reach would drag any alpha- or
+    // bbox-based anchor around and re-introduce the shake.
+    const isHair = (x, y) => { const i = (y * W + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2]; return d[i + 3] > 40 && R > 55 && R < 165 && G > 30 && G < 105 && B < 80 && (R - G) > 12 && R > G && G >= B; };
     const cw = Math.floor(W / 4);
     // Shared vertical band across the whole strip so every frame is the exact
     // same size (differing sizes make hero() resize the sprite frame-to-frame).
     let top = H, bot = 0;
     for (let y = 0; y < H; y++) { let any = false; for (let x = 0; x < cw * 4 && !any; x++) if (A(x, y) > 40) any = true; if (any) { if (y < top) top = y; if (y > bot) bot = y; } }
     if (bot < top) return;
-    const bh = bot - top + 1, headBot = top + Math.round(bh * 0.45);
+    const bh = bot - top + 1;
     // Per-frame HEAD anchor: these source frames are drawn with the character's
-    // head drifting sideways cell-to-cell, so slicing at fixed cells makes the
-    // body slide across the tile and snap back each loop (the "shaking"). We
-    // measure the horizontal centroid of the upper body (head+shoulders, the
-    // stable part) and record its offset from the cell centre; hero() shifts the
-    // draw by that offset so the head stays pinned while the feet swing.
+    // head rocking side to side cell-to-cell (head one way, feet the other), so a
+    // plain fixed-cell slice makes the head visibly swing every loop (the
+    // "shaking"). We pin the head: measure the horizontal centroid of the HAIR
+    // and record its offset from the cell centre; hero() shifts the draw by that
+    // offset so the head stays put while the feet do a small natural step.
     const frames = [];
     for (let i = 0; i < 4; i++) {
       const x0 = i * cw;
       let sx = 0, n = 0;
-      for (let y = top; y <= headBot; y++) for (let x = x0; x < x0 + cw; x++) if (A(x, y) > 40) { sx += x; n++; }
-      const anchor = n ? (sx / n) - (x0 + cw / 2) : 0;   // head centre relative to cell centre (source px)
+      for (let y = top; y <= bot; y++) for (let x = x0; x < x0 + cw; x++) if (isHair(x, y)) { sx += x; n++; }
+      const anchor = n ? (sx / n) - (x0 + cw / 2) : 0;   // hair centre relative to cell centre (source px)
       frames.push([x0, top, cw, bh, anchor]);
     }
     this._aux[dir] = { img, frames };

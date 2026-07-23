@@ -758,7 +758,11 @@ const ScreenGame = {
     if (this.mode === 'play') {
       const evs = FM.update(this, dt);
       if (evs.length && this._handleFreeEvents(evs)) return;   // mode may have changed
-      this.pframe = this.pmoving ? (1 + Math.floor(this.walkPhase * 5) % 4) : 0;
+      // a shove is slow and deliberate ("heavy"): step its frames on a calm,
+      // time-based clock rather than the brisk distance-based walk cadence.
+      const shoving = !!this.blockSlide || (this.pushGrace > 0 && this.pmoving && this.pushDir === this.pdir);
+      if (shoving) this.pframe = 1 + Math.floor(this.t * 5) % 4;
+      else this.pframe = this.pmoving ? (1 + Math.floor(this.walkPhase * 5) % 4) : 0;
       if (this.gameMode === 'challenge' && this.movesLeft() === 0) { this._runOver(); return; }
     }
 
