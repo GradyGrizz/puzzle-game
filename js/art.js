@@ -814,6 +814,7 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     else if (dir === 'left') { box = this.PUSH.right[frame % 4]; flip = true; }
     else box = this.PUSH[dir][frame % 4];
   } else if (idle) box = this.IDLE[dir];
+  else if (dir === 'left') { box = this.WALK.right[frame % 4]; flip = true; }
   else box = this.WALK[dir][frame % 4];
   let [sx, sy, sw, sh] = box;
   if (!src || (src.complete === false)) return;
