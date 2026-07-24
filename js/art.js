@@ -836,8 +836,9 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     else if (dir === 'left') { box = this.PUSH.right[frame % 4]; flip = true; }
     else box = this.PUSH[dir][frame % 4];
   } else if (idle) box = this.IDLE[dir];
-  else if (dir === 'left') { box = this.WALK.right[frame % 4]; flip = true; }
-  else box = this.WALK[dir][frame % 4];
+  // The old Delver walk cycle is retired while its replacement is rebuilt.
+  // Movement temporarily uses the matching directional idle pose.
+  else box = this.IDLE[dir];
   let [sx, sy, sw, sh] = box;
   if (!src || (src.complete === false)) return;
   let dh, dw, dx, dy;
