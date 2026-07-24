@@ -752,6 +752,40 @@ function spriteLabFace(dir) {
   }[dir] || [0, 1];
 }
 
+const SKELETON_ATTACK_SCALE = [1, 1.02, 1.02, 1, 1.12, 1.18, 1.18, 1.18, 1.16, 1.16];
+const SKELETON_ATTACK_COLOR = [
+  [1, 1, 1], [0.988, 1.003, 0.981], [0.965, 0.982, 0.956], [0.946, 0.982, 0.949],
+  [0.910, 0.968, 0.928], [0.898, 0.961, 0.904], [0.868, 0.942, 0.877],
+  [0.862, 0.959, 0.894], [0.919, 0.971, 0.955], [0.907, 0.984, 0.951],
+];
+const SKELETON_ATTACK_TINTED = [];
+
+function spriteLabAttackImage(img, frame) {
+  if (frame === 0 || !Art._ready(img)) return img;
+  if (SKELETON_ATTACK_TINTED[frame]) return SKELETON_ATTACK_TINTED[frame];
+  const cv = document.createElement('canvas');
+  cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  const c2 = cv.getContext('2d');
+  c2.drawImage(img, 0, 0);
+  try {
+    const pixels = c2.getImageData(0, 0, cv.width, cv.height);
+    const d = pixels.data, gain = SKELETON_ATTACK_COLOR[frame];
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      // Keep the cyan wind slash unchanged; color-match only the skeleton and sword.
+      if (d[i + 2] > d[i + 1] && d[i + 1] > d[i] && d[i + 2] > 130) continue;
+      d[i] = Math.min(255, Math.round(d[i] * gain[0]));
+      d[i + 1] = Math.min(255, Math.round(d[i + 1] * gain[1]));
+      d[i + 2] = Math.min(255, Math.round(d[i + 2] * gain[2]));
+    }
+    c2.putImageData(pixels, 0, 0);
+  } catch (e) {
+    return img;
+  }
+  SKELETON_ATTACK_TINTED[frame] = cv;
+  return cv;
+}
+
 function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   if (id === 'hero') {
     const frame = Math.floor(t * 8) % 4;
@@ -760,11 +794,21 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   }
   if (id === 'skeleton') {
     if (anim.kind === 'attackFrames') {
-      const frame = Math.floor(t * 8) % 10;
+      const frame = Math.floor(t * 10) % 10;
       const img = Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')];
       if (Art._ready(img)) {
+        const scale = SKELETON_ATTACK_SCALE[frame];
+        const drawImg = spriteLabAttackImage(img, frame);
         ctx.imageSmoothingEnabled = false;
-        Art._blit(ctx, img, x, y - tile * 0.28, tile * 2.65, tile * 2.65);
+        // Scale around the feet instead of the canvas center so the downswing's
+        // head movement remains motion, not an apparent full-body shrink.
+        const box = tile * 2.65 * scale;
+        const iw = drawImg.naturalWidth || drawImg.width;
+        const ih = drawImg.naturalHeight || drawImg.height;
+        const fit = Math.min(box / iw, box / ih);
+        const dw = Math.round(iw * fit), dh = Math.round(ih * fit);
+        const cy = y - tile * (0.28 + (scale - 1) * 0.68);
+        ctx.drawImage(drawImg, Math.round(x - dw / 2), Math.round(cy - dh / 2), dw, dh);
       }
       return;
     }
