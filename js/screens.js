@@ -738,7 +738,7 @@ const SPRITE_LAB_ANIMS = {
     { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
     { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
     { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
-    { label: 'ATTACK RIGHT', dir: 'right', kind: 'attack' },
+    { label: 'ATTACK RIGHT', dir: 'right', kind: 'attackFrames' },
     { label: 'RIG ATTACK RIGHT', dir: 'right', kind: 'rigAttack' },
   ],
   dart: [
@@ -759,6 +759,15 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
     return;
   }
   if (id === 'skeleton') {
+    if (anim.kind === 'attackFrames') {
+      const frame = Math.floor(t * 8) % 10;
+      const img = Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')];
+      if (Art._ready(img)) {
+        ctx.imageSmoothingEnabled = false;
+        Art._blit(ctx, img, x, y - tile * 0.28, tile * 2.65, tile * 2.65);
+      }
+      return;
+    }
     if (anim.kind === 'rigAttack') {
       SkeletonRig.drawAttackRight(ctx, x, y, tile, (t * 1.35) % 1);
       return;
