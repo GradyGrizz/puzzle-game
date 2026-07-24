@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/24/2026 6:57am (mst)';
+const BUILD_STAMP = '7/24/2026 7:20am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -887,7 +887,10 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
     Combat._drawSkeleton(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, e);
     return;
   }
-  Combat._drawDarter(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, { state: 'idle' });
+  const face = spriteLabFace(anim.dir);
+  Combat._drawDarter(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, {
+    faceX: face[0], faceY: face[1], state: 'idle',
+  });
 }
 
 const ScreenSpriteLab = {

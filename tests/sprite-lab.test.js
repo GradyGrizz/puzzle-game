@@ -36,6 +36,8 @@ expect('masked tribalist exposes all four idle directions',
   anims.dart.length === 4
   && anims.dart.every(a => a.kind === 'idle')
   && anims.dart.map(a => a.dir).sort().join(',') === 'down,left,right,up');
+expect('masked tribalist renderer receives the selected direction',
+  source.includes('faceX: face[0], faceY: face[1], state:'));
 
 if (failed) {
   console.error('\n' + failed + ' SPRITE LAB TEST(S) FAILED');
