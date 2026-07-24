@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/24/2026 12:20am (mst)';
+const BUILD_STAMP = '7/24/2026 12:32am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -718,7 +718,7 @@ const ScreenDev = {
 // ══ SPRITE LAB (developer mode only) ══════════════════════════
 const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
-  { id: 'skeleton', name: 'SKELETON', sub: '6 ANIMATIONS' },
+  { id: 'skeleton', name: 'SKELETON', sub: '7 ANIMATIONS' },
   { id: 'dart', name: 'DART SENTRY', sub: '1 ANIMATION' },
 ];
 
@@ -738,6 +738,7 @@ const SPRITE_LAB_ANIMS = {
     { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
     { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
     { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
+    { label: 'ATTACK LEFT', dir: 'left', kind: 'attackFrames' },
     { label: 'ATTACK RIGHT', dir: 'right', kind: 'attackFrames' },
     { label: 'RIG ATTACK RIGHT', dir: 'right', kind: 'rigAttack' },
   ],
@@ -826,7 +827,16 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
           + (SKELETON_ATTACK_FEET[0] / 1254 - 0.5) * tile * 2.65;
         const cy = frameOneFeetY
           - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
-        ctx.drawImage(drawImg, Math.round(x - dw / 2), Math.round(cy - dh / 2), dw, dh);
+        const dy = Math.round(cy - dh / 2);
+        if (anim.dir === 'left') {
+          ctx.save();
+          ctx.translate(Math.round(x), 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(drawImg, Math.round(-dw / 2), dy, dw, dh);
+          ctx.restore();
+        } else {
+          ctx.drawImage(drawImg, Math.round(x - dw / 2), dy, dw, dh);
+        }
       }
       return;
     }

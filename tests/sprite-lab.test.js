@@ -28,8 +28,8 @@ expect('hero has four walking directions',
   anims.hero.filter(a => a.kind === 'walk').map(a => a.dir).sort().join(',') === 'down,left,right,up');
 expect('hero has four pushing directions',
   anims.hero.filter(a => a.kind === 'push').map(a => a.dir).sort().join(',') === 'down,left,right,up');
-expect('skeleton frame animation catalog only includes attack right',
-  anims.skeleton.filter(a => a.kind === 'attackFrames').map(a => a.dir).join(',') === 'right');
+expect('skeleton frame animation catalog includes mirrored left and right attacks',
+  anims.skeleton.filter(a => a.kind === 'attackFrames').map(a => a.dir).sort().join(',') === 'left,right');
 expect('skeleton runtime rig prototype only includes attack right',
   anims.skeleton.filter(a => a.kind === 'rigAttack').map(a => a.dir).join(',') === 'right');
 expect('dart sentry exposes its current idle animation',

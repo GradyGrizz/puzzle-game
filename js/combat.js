@@ -201,13 +201,15 @@ const Combat = {
 
   _drawSkeleton(ctx, x, y, T, e) {
     const attackRight = typeof Art !== 'undefined' && Art.img && Art.img.skeleton_attack_right;
-    const facingRight = Math.abs(e.faceX) > Math.abs(e.faceY) && e.faceX > 0;
+    const facingHorizontal = Math.abs(e.faceX) > Math.abs(e.faceY);
+    const facingRight = facingHorizontal && e.faceX > 0;
+    const facingLeft = facingHorizontal && e.faceX < 0;
     const attackElapsed = this.ENEMY.skeleton.windup - Math.max(0, e.timer);
     const frame = typeof spriteLabAttackFrameAt === 'function'
       ? spriteLabAttackFrameAt(attackElapsed) : 0;
     const frameImage = typeof Art !== 'undefined' && Art.img
       ? Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')] : null;
-    if (e.state === 'windup' && facingRight && frameImage && Art._ready(frameImage)
+    if (e.state === 'windup' && facingHorizontal && frameImage && Art._ready(frameImage)
         && typeof spriteLabAttackImage === 'function') {
       const scale = SKELETON_ATTACK_SCALE[frame];
       const drawImg = spriteLabAttackImage(frameImage, frame);
@@ -220,7 +222,17 @@ const Combat = {
       const dw = Math.round(iw * fit), dh = Math.round(ih * fit);
       const cy = y + T - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(drawImg, Math.round(x + T / 2 - dw / 2), Math.round(cy - dh / 2), dw, dh);
+      const centerX = Math.round(x + T / 2);
+      const dy = Math.round(cy - dh / 2);
+      if (facingLeft) {
+        ctx.save();
+        ctx.translate(centerX, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(drawImg, Math.round(-dw / 2), dy, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(drawImg, Math.round(centerX - dw / 2), dy, dw, dh);
+      }
       return;
     }
     if (e.state === 'windup' && facingRight && attackRight && Art._ready(attackRight)) {
