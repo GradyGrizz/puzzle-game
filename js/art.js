@@ -708,6 +708,10 @@ ASSETS: {
   mi_sword: 'art/mi_sword.png', mi_depth: 'art/mi_depth.png', mi_clock: 'art/mi_clock.png',
   mi_cart: 'art/mi_cart.png', mi_gear: 'art/mi_gear.png',
   skeleton: 'art/skeleton.png', skeleton_attack_right: 'art/skeleton_attack_right.png',
+  skeleton_rig_right: 'art/rig/skeleton_idle_right.png',
+  skeleton_rig_left: 'art/rig/skeleton_idle_left.png',
+  skeleton_rig_up: 'art/rig/skeleton_idle_up.png',
+  skeleton_rig_down: 'art/rig/skeleton_idle_down.png',
 },
 img: {},
 loadAssets() {

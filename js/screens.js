@@ -718,7 +718,7 @@ const ScreenDev = {
 // ══ SPRITE LAB (developer mode only) ══════════════════════════
 const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
-  { id: 'skeleton', name: 'SKELETON', sub: '5 ANIMATIONS' },
+  { id: 'skeleton', name: 'SKELETON', sub: '6 ANIMATIONS' },
   { id: 'dart', name: 'DART SENTRY', sub: '1 ANIMATION' },
 ];
 
@@ -739,6 +739,7 @@ const SPRITE_LAB_ANIMS = {
     { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
     { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
     { label: 'ATTACK RIGHT', dir: 'right', kind: 'attack' },
+    { label: 'RIG ATTACK RIGHT', dir: 'right', kind: 'rigAttack' },
   ],
   dart: [
     { label: 'IDLE', dir: 'down', kind: 'idle' },
@@ -758,6 +759,10 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
     return;
   }
   if (id === 'skeleton') {
+    if (anim.kind === 'rigAttack') {
+      SkeletonRig.drawAttackRight(ctx, x, y, tile, (t * 1.35) % 1);
+      return;
+    }
     const face = spriteLabFace(anim.dir);
     const attacking = anim.kind === 'attack';
     const cycle = (t * 1.65) % 1;
