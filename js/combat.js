@@ -200,6 +200,21 @@ const Combat = {
   },
 
   _drawSkeleton(ctx, x, y, T, e) {
+    const attackRight = typeof Art !== 'undefined' && Art.img && Art.img.skeleton_attack_right;
+    const facingRight = Math.abs(e.faceX) > Math.abs(e.faceY) && e.faceX > 0;
+    if (e.state === 'windup' && facingRight && attackRight && Art._ready(attackRight)) {
+      const progress = 1 - Math.max(0, e.timer) / this.ENEMY.skeleton.windup;
+      const frame = Math.min(7, Math.max(0, Math.floor(progress * 8)));
+      const sx = Math.floor(frame * attackRight.naturalWidth / 8);
+      const ex = Math.floor((frame + 1) * attackRight.naturalWidth / 8);
+      const sw = ex - sx, sh = attackRight.naturalHeight;
+      const dh = Math.round(T * 3.4), dw = Math.round(dh * sw / sh);
+      const dx = Math.round(x + (T - dw) / 2);
+      const dy = Math.round(y - T * 1.33);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(attackRight, sx, 0, sw, sh, dx, dy, dw, dh);
+      return;
+    }
     const sprite = typeof Art !== 'undefined' && Art.img && Art.img.skeleton;
     if (sprite && Art._ready(sprite)) {
       const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
