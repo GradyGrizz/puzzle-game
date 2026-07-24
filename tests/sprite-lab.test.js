@@ -23,7 +23,9 @@ const chars = sandbox.SPRITE_LAB_CHARACTERS;
 const anims = sandbox.SPRITE_LAB_ANIMS;
 
 expect('sprite lab lists every current character', chars.map(c => c.id).join(',') === 'hero,skeleton,dart');
-expect('hero has exactly eight animations', anims.hero.length === 8);
+expect('hero has exactly twelve animations', anims.hero.length === 12);
+expect('hero has four idle directions',
+  anims.hero.filter(a => a.kind === 'idle').map(a => a.dir).sort().join(',') === 'down,left,right,up');
 expect('hero has four walking directions',
   anims.hero.filter(a => a.kind === 'walk').map(a => a.dir).sort().join(',') === 'down,left,right,up');
 expect('hero has four pushing directions',

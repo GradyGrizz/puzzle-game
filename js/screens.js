@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/24/2026 7:20am (mst)';
+const BUILD_STAMP = '7/24/2026 9:05am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -717,13 +717,17 @@ const ScreenDev = {
 
 // ══ SPRITE LAB (developer mode only) ══════════════════════════
 const SPRITE_LAB_CHARACTERS = [
-  { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
+  { id: 'hero', name: 'DELVER', sub: '12 ANIMATIONS' },
   { id: 'skeleton', name: 'SKELETON', sub: '9 ANIMATIONS' },
   { id: 'dart', name: 'MASKED TRIBALIST', sub: '4 ANIMATIONS' },
 ];
 
 const SPRITE_LAB_ANIMS = {
   hero: [
+    { label: 'IDLE UP', dir: 'up', kind: 'idle' },
+    { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
+    { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
+    { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
     { label: 'WALK UP', dir: 'up', kind: 'walk' },
     { label: 'WALK DOWN', dir: 'down', kind: 'walk' },
     { label: 'WALK LEFT', dir: 'left', kind: 'walk' },
@@ -833,7 +837,8 @@ function spriteLabAttackImage(img, direction, frame) {
 function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   if (id === 'hero') {
     const frame = Math.floor(t * 8) % 4;
-    Art.hero(ctx, anim.dir, frame, Math.round(x - tile / 2), Math.round(y - tile), tile, anim.kind === 'push', false);
+    Art.hero(ctx, anim.dir, frame, Math.round(x - tile / 2), Math.round(y - tile),
+      tile, anim.kind === 'push', anim.kind === 'idle');
     return;
   }
   if (id === 'skeleton') {

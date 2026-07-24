@@ -707,6 +707,10 @@ ASSETS: {
   relic_boots: 'art/relic_boots.png',
   mi_sword: 'art/mi_sword.png', mi_depth: 'art/mi_depth.png', mi_clock: 'art/mi_clock.png',
   mi_cart: 'art/mi_cart.png', mi_gear: 'art/mi_gear.png',
+  player_idle_up: 'art/player_idle/player_idle_up.png',
+  player_idle_down: 'art/player_idle/player_idle_down.png',
+  player_idle_left: 'art/player_idle/player_idle_left.png',
+  player_idle_right: 'art/player_idle/player_idle_right.png',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
@@ -800,6 +804,23 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
+  const idleSprite = idle && this.img && this.img['player_idle_' + dir];
+  if (idleSprite && this._ready(idleSprite)) {
+    const dh = Math.round(tile * 1.05);
+    const dw = Math.round(dh * idleSprite.naturalWidth / idleSprite.naturalHeight);
+    const dx = px + ((tile - dw) >> 1);
+    const dy = py + tile - dh;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(idleSprite, dx, dy, dw, dh);
+    return;
+  }
   // pick the right frame box: idle pose when standing, else walk/push cycle.
   // Two sheet quirks handled here:
   //  - PUSH.up reaches its arms out to the side (reads as a side-push), so the
