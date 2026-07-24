@@ -36,25 +36,39 @@ const SkeletonRig = {
 
   _attackPose(progress) {
     const p = ((progress % 1) + 1) % 1;
-    let arm, body, head, brace;
-    if (p < 0.30) {
-      const t = this._ease(p / 0.30);
-      arm = -0.48 * t; body = -0.07 * t; head = 0.035 * t; brace = t;
-    } else if (p < 0.53) {
-      const t = this._ease((p - 0.30) / 0.23);
-      arm = -0.48 + 1.42 * t; body = -0.07 + 0.18 * t;
-      head = 0.035 - 0.075 * t; brace = 1;
+    let arm, body, head, brace, rootX, rootY, stretch;
+    if (p < 0.32) {
+      // Big anticipation: sit back, open the stance, and pull the sword well
+      // behind the skull so the strike has somewhere visible to travel from.
+      const t = this._ease(p / 0.32);
+      arm = -0.92 * t; body = -0.18 * t; head = 0.11 * t;
+      brace = t; rootX = -10 * t; rootY = 5 * t; stretch = -0.035 * t;
+    } else if (p < 0.50) {
+      // Fast acceleration through the target. The torso and whole body lunge
+      // with the sword instead of leaving the arm to do all the movement.
+      const t = this._ease((p - 0.32) / 0.18);
+      arm = -0.92 + 2.32 * t; body = -0.18 + 0.50 * t;
+      head = 0.11 - 0.25 * t; brace = 1;
+      rootX = -10 + 42 * t; rootY = 5 - 10 * t; stretch = -0.035 + 0.11 * t;
+    } else if (p < 0.68) {
+      // Follow-through carries slightly farther before the recovery begins.
+      const t = this._ease((p - 0.50) / 0.18);
+      arm = 1.40 + 0.24 * t; body = 0.32 + 0.07 * t;
+      head = -0.14 - 0.03 * t; brace = 1 - 0.15 * t;
+      rootX = 32 + 6 * t; rootY = -5 + 8 * t; stretch = 0.075 - 0.035 * t;
     } else {
-      const t = this._ease((p - 0.53) / 0.47);
-      arm = 0.94 * (1 - t); body = 0.11 * (1 - t);
-      head = -0.04 * (1 - t); brace = 1 - t;
+      const t = this._ease((p - 0.68) / 0.32);
+      arm = 1.64 * (1 - t); body = 0.39 * (1 - t);
+      head = -0.17 * (1 - t); brace = 0.85 * (1 - t);
+      rootX = 38 * (1 - t); rootY = 3 * (1 - t); stretch = 0.04 * (1 - t);
     }
     return {
-      head: { r: head, x: body * 18, y: 0 },
-      body: { r: body, x: body * 25, y: brace * 2 },
-      swordArm: { r: arm, x: body * 26, y: brace * 2 },
-      frontLeg: { r: -0.08 * brace, x: 3 * brace, y: 0 },
-      backLeg: { r: 0.08 * brace, x: -2 * brace, y: 0 },
+      root: { x: rootX, y: rootY },
+      head: { r: head, x: body * 26, y: -Math.abs(body) * 8, sx: 1, sy: 1 },
+      body: { r: body, x: body * 34, y: brace * 3, sx: 1 + stretch, sy: 1 - stretch * 0.45 },
+      swordArm: { r: arm, x: body * 42, y: -Math.max(0, body) * 15, sx: 1, sy: 1 },
+      frontLeg: { r: -0.22 * brace, x: 11 * brace, y: -2 * brace, sx: 1, sy: 1 },
+      backLeg: { r: 0.18 * brace, x: -9 * brace, y: 4 * brace, sx: 1, sy: 1 },
     };
   },
 
@@ -66,6 +80,7 @@ const SkeletonRig = {
       originY + py * scale + (pose.y || 0) * scale
     );
     ctx.rotate(pose.r || 0);
+    ctx.scale(pose.sx == null ? 1 : pose.sx, pose.sy == null ? 1 : pose.sy);
     ctx.translate(-px * scale, -py * scale);
     ctx.beginPath();
     const first = def.poly[0];
@@ -85,9 +100,9 @@ const SkeletonRig = {
     if (!Art._ready(img)) return false;
     const rig = this.RIGHT;
     const scale = tile * 1.12 / rig.bodyH;
-    const originX = Math.round(cx - rig.centerX * scale);
-    const originY = Math.round(feetY - rig.feetY * scale);
     const pose = this._attackPose(progress);
+    const originX = Math.round(cx - rig.centerX * scale + pose.root.x * scale);
+    const originY = Math.round(feetY - rig.feetY * scale + pose.root.y * scale);
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     const order = ['backLeg', 'frontLeg', 'body', 'swordArm', 'head'];
