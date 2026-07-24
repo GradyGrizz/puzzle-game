@@ -697,6 +697,14 @@ ASSETS: {
   player_idle_down: 'art/player_idle/player_idle_down.png',
   player_idle_left: 'art/player_idle/player_idle_left.png',
   player_idle_right: 'art/player_idle/player_idle_right.png',
+  player_walk_right_01: 'art/animations/player_walk_right/frame_01.png',
+  player_walk_right_02: 'art/animations/player_walk_right/frame_02.png',
+  player_walk_right_03: 'art/animations/player_walk_right/frame_03.png',
+  player_walk_right_04: 'art/animations/player_walk_right/frame_04.png',
+  player_walk_right_05: 'art/animations/player_walk_right/frame_05.png',
+  player_walk_right_06: 'art/animations/player_walk_right/frame_06.png',
+  player_walk_right_07: 'art/animations/player_walk_right/frame_07.png',
+  player_walk_right_08: 'art/animations/player_walk_right/frame_08.png',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
@@ -790,8 +798,39 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
-  // Until new walk/push cycles are created, every player state intentionally
-  // uses one of the four new directional idle sprites.
+  // Side walking uses the new eight-frame right-facing cycle. Left is an exact
+  // horizontal mirror so both directions share identical timing and anatomy.
+  if (!pushing && !idle && (dir === 'right' || dir === 'left')) {
+    const walkFrame = ((frame % 8) + 8) % 8;
+    const walkSprite = this.img && this.img['player_walk_right_' + String(walkFrame + 1).padStart(2, '0')];
+    if (walkSprite && this._ready(walkSprite)) {
+      const dh = Math.round(tile * 1.05);
+      const dw = Math.round(dh * walkSprite.naturalWidth / walkSprite.naturalHeight);
+      const dx = px + ((tile - dw) >> 1);
+      const dy = py + tile - dh;
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.imageSmoothingEnabled = false;
+      if (dir === 'left') {
+        ctx.save();
+        ctx.translate(dx + dw, dy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(walkSprite, 0, 0, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(walkSprite, dx, dy, dw, dh);
+      }
+      return;
+    }
+  }
+
+  // Up/down walking and all pushes remain on the directional idle placeholders
+  // until their replacement cycles are built.
   const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);
