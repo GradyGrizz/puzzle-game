@@ -719,7 +719,7 @@ const ScreenDev = {
 const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
   { id: 'skeleton', name: 'SKELETON', sub: '9 ANIMATIONS' },
-  { id: 'dart', name: 'MASKED TRIBALIST', sub: '1 ANIMATION' },
+  { id: 'dart', name: 'MASKED TRIBALIST', sub: '4 ANIMATIONS' },
 ];
 
 const SPRITE_LAB_ANIMS = {
@@ -745,7 +745,10 @@ const SPRITE_LAB_ANIMS = {
     { label: 'RIG ATTACK RIGHT', dir: 'right', kind: 'rigAttack' },
   ],
   dart: [
-    { label: 'IDLE', dir: 'down', kind: 'idle' },
+    { label: 'IDLE UP', dir: 'up', kind: 'idle' },
+    { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
+    { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
+    { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
   ],
 };
 

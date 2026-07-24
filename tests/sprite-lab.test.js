@@ -32,8 +32,10 @@ expect('skeleton frame animation catalog includes all four attack directions',
   anims.skeleton.filter(a => a.kind === 'attackFrames').map(a => a.dir).sort().join(',') === 'down,left,right,up');
 expect('skeleton runtime rig prototype only includes attack right',
   anims.skeleton.filter(a => a.kind === 'rigAttack').map(a => a.dir).join(',') === 'right');
-expect('dart sentry exposes its current idle animation',
-  anims.dart.length === 1 && anims.dart[0].kind === 'idle');
+expect('masked tribalist exposes all four idle directions',
+  anims.dart.length === 4
+  && anims.dart.every(a => a.kind === 'idle')
+  && anims.dart.map(a => a.dir).sort().join(',') === 'down,left,right,up');
 
 if (failed) {
   console.error('\n' + failed + ' SPRITE LAB TEST(S) FAILED');
