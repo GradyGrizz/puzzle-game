@@ -752,7 +752,11 @@ function spriteLabFace(dir) {
   }[dir] || [0, 1];
 }
 
-const SKELETON_ATTACK_SCALE = [1, 1.02, 1.02, 1, 1.12, 1.18, 1.18, 1.18, 1.16, 1.16];
+// Normalize against frame 1's skull width. The generated later frames contain
+// a smaller character inside the same 1254px canvas, so fitting the whole
+// canvas equally makes the skeleton appear to shrink during the swing.
+const SKELETON_ATTACK_SCALE = [1, 1.036, 1.066, 1.142, 1.237, 1.345, 1.365, 1.336, 1.303, 1.303];
+const SKELETON_ATTACK_FEET = [1079, 1051, 1052, 1077, 998, 954, 957, 957, 961, 960];
 const SKELETON_ATTACK_COLOR = [
   [1, 1, 1], [0.988, 1.003, 0.981], [0.965, 0.982, 0.956], [0.946, 0.982, 0.949],
   [0.910, 0.968, 0.928], [0.898, 0.961, 0.904], [0.868, 0.942, 0.877],
@@ -794,7 +798,7 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   }
   if (id === 'skeleton') {
     if (anim.kind === 'attackFrames') {
-      const frame = Math.floor(t * 10) % 10;
+      const frame = Math.floor(t * 12) % 10;
       const img = Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')];
       if (Art._ready(img)) {
         const scale = SKELETON_ATTACK_SCALE[frame];
@@ -807,7 +811,12 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
         const ih = drawImg.naturalHeight || drawImg.height;
         const fit = Math.min(box / iw, box / ih);
         const dw = Math.round(iw * fit), dh = Math.round(ih * fit);
-        const cy = y - tile * (0.28 + (scale - 1) * 0.68);
+        // Keep the sole line fixed to frame 1 while letting the head, torso,
+        // sword, and wind slash extend freely above and outside the usual box.
+        const frameOneFeetY = y - tile * 0.28
+          + (SKELETON_ATTACK_FEET[0] / 1254 - 0.5) * tile * 2.65;
+        const cy = frameOneFeetY
+          - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
         ctx.drawImage(drawImg, Math.round(x - dw / 2), Math.round(cy - dh / 2), dw, dh);
       }
       return;
