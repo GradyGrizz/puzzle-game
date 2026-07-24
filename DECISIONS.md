@@ -42,10 +42,10 @@ through this list and you've reviewed every judgment call in the build.
 
 11. **Plain JS, no bundler, no framework.** The whole game is ~5k lines
     of dependency-free code — trivially wrappable, auditable, and fast.
-12. **All art except the hero sheet is procedural canvas drawing.**
-    Guarantees palette cohesion and made themes nearly free. The hero
-    sprite sheets (`hero2.png`, `push_left.png`) are the established
-    assets and remain the only bitmaps.
+12. **Player art uses standalone directional assets.** The retired hero,
+    walk, and push sheets were removed. The current player visuals are the
+    four `art/player_idle/player_idle_*.png` direction files while new
+    animation cycles are rebuilt.
 13. **All audio is synthesized WebAudio chiptune** — zero audio files,
     zero licensing. The three music loops are short and deliberately
     sparse; a composer pass would elevate them (they're serviceable,

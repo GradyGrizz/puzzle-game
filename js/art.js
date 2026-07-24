@@ -558,8 +558,7 @@ item(ctx, type, x, y, s) {
 },
 
 // ── hero sprite sheet ────────────────────────────────────────
-// All frame boxes below were auto-derived from hero2.png by connected-
-// component detection (scratchpad/ccl.js), so they're tight and aligned.
+// Retired legacy frame metadata retained temporarily as migration reference.
 // The sheet has four sections (IDLE, WALK, PUSH, PULL); each has real
 // up/down/left/right rows — including a dedicated PUSH-LEFT row, so no
 // mirroring is needed (an earlier build wrongly mirrored right for left).
@@ -587,25 +586,12 @@ _skin: 'skin_default', _skinCache: {},
 _aux: {},
 
 loadSprites(onReady) {
-  this.sheet = new Image();
-  this.sheet.src = 'hero2.png';
-  this.sheet.onload = onReady;
-  this._loadAux();
   this.loadAssets();
+  if (onReady) onReady();
 },
 
-// load push_up.png if present and auto-slice 4 tight frames; missing files
-// just fall back to the main-sheet poses. (push_left.png is intentionally
-// NOT used: its four frames slice to very uneven widths, so the sprite jerks
-// frame-to-frame. The mirrored PUSH.right frames are uniform and read clean.)
 _loadAux() {
-  const files = { up: 'push_up.png' };
-  for (const dir in files) {
-    const img = new Image();
-    img.onload = () => this._sliceAux(dir, img);
-    img.onerror = () => {};
-    img.src = files[dir];
-  }
+  // Retired with the old push sheets.
 },
 // Rebalance the push sheet's proportions: the source hero has an oversized,
 // forward-hunched head that reads as chibi next to the walk/idle sprite. For
@@ -804,7 +790,9 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
-  const idleSprite = idle && this.img && this.img['player_idle_' + dir];
+  // Until new walk/push cycles are created, every player state intentionally
+  // uses one of the four new directional idle sprites.
+  const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);
     const dw = Math.round(dh * idleSprite.naturalWidth / idleSprite.naturalHeight);
@@ -821,7 +809,9 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     ctx.drawImage(idleSprite, dx, dy, dw, dh);
     return;
   }
-  // pick the right frame box: idle pose when standing, else walk/push cycle.
+  return;
+  // Legacy sheet renderer retained below only for reference while the new
+  // animations are rebuilt; it is unreachable and loads no deleted assets.
   // Two sheet quirks handled here:
   //  - PUSH.up reaches its arms out to the side (reads as a side-push), so the
   //    up-push uses the clean back-view WALK.up cycle instead.
