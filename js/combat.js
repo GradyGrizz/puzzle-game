@@ -5,7 +5,7 @@
 
 const Combat = {
   ENEMY: {
-    skeleton: { hp: 3, speed: 1.35, aggro: 7, range: 0.95, windup: 0.42, cooldown: 0.9 },
+    skeleton: { hp: 3, speed: 1.35, aggro: 7, range: 0.95, windup: 25 / 36, cooldown: 0.9 },
     dart:     { hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
   },
   PLAYER_MAX_HP: 5,
@@ -202,11 +202,30 @@ const Combat = {
   _drawSkeleton(ctx, x, y, T, e) {
     const attackRight = typeof Art !== 'undefined' && Art.img && Art.img.skeleton_attack_right;
     const facingRight = Math.abs(e.faceX) > Math.abs(e.faceY) && e.faceX > 0;
+    const attackElapsed = this.ENEMY.skeleton.windup - Math.max(0, e.timer);
+    const frame = typeof spriteLabAttackFrameAt === 'function'
+      ? spriteLabAttackFrameAt(attackElapsed) : 0;
+    const frameImage = typeof Art !== 'undefined' && Art.img
+      ? Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')] : null;
+    if (e.state === 'windup' && facingRight && frameImage && Art._ready(frameImage)
+        && typeof spriteLabAttackImage === 'function') {
+      const scale = SKELETON_ATTACK_SCALE[frame];
+      const drawImg = spriteLabAttackImage(frameImage, frame);
+      const box = T * 2.65 * scale;
+      const iw = drawImg.naturalWidth || drawImg.width;
+      const ih = drawImg.naturalHeight || drawImg.height;
+      const fit = Math.min(box / iw, box / ih);
+      const dw = Math.round(iw * fit), dh = Math.round(ih * fit);
+      const cy = y + T - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(drawImg, Math.round(x + T / 2 - dw / 2), Math.round(cy - dh / 2), dw, dh);
+      return;
+    }
     if (e.state === 'windup' && facingRight && attackRight && Art._ready(attackRight)) {
       const progress = 1 - Math.max(0, e.timer) / this.ENEMY.skeleton.windup;
-      const frame = Math.min(7, Math.max(0, Math.floor(progress * 8)));
-      const sx = Math.floor(frame * attackRight.naturalWidth / 8);
-      const ex = Math.floor((frame + 1) * attackRight.naturalWidth / 8);
+      const oldFrame = Math.min(7, Math.max(0, Math.floor(progress * 8)));
+      const sx = Math.floor(oldFrame * attackRight.naturalWidth / 8);
+      const ex = Math.floor((oldFrame + 1) * attackRight.naturalWidth / 8);
       const sw = ex - sx, sh = attackRight.naturalHeight;
       const dh = Math.round(T * 3.4), dw = Math.round(dh * sw / sh);
       const dx = Math.round(x + (T - dw) / 2);
