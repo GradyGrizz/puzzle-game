@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/24/2026 1:49pm (mst)';
+const BUILD_STAMP = '7/24/2026 3:37pm (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -836,7 +836,35 @@ function spriteLabAttackImage(img, direction, frame) {
 
 function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   if (id === 'hero') {
-    const frame = Math.floor(t * 8) % 4;
+    const frame = Math.floor(t * 8) % 8;
+    const walkSheet = Art.img.player_walk_right_review;
+    if (anim.kind === 'walk' && (anim.dir === 'right' || anim.dir === 'left') &&
+        Art._ready(walkSheet)) {
+      const sw = Math.floor(walkSheet.naturalWidth / 8);
+      const sh = walkSheet.naturalHeight;
+      const dh = Math.round(tile * 1.05);
+      const dw = Math.round(dh * sw / sh);
+      const dx = Math.round(x - dw / 2);
+      const dy = Math.round(y - dh);
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.imageSmoothingEnabled = false;
+      if (anim.dir === 'left') {
+        ctx.save();
+        ctx.translate(dx + dw, dy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(walkSheet, frame * sw, 0, sw, sh, 0, 0, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(walkSheet, frame * sw, 0, sw, sh, dx, dy, dw, dh);
+      }
+      return;
+    }
     Art.hero(ctx, anim.dir, frame, Math.round(x - tile / 2), Math.round(y - tile),
       tile, anim.kind === 'push', anim.kind === 'idle');
     return;

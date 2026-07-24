@@ -697,6 +697,7 @@ ASSETS: {
   player_idle_down: 'art/player_idle/player_idle_down.png',
   player_idle_left: 'art/player_idle/player_idle_left.png',
   player_idle_right: 'art/player_idle/player_idle_right.png',
+  player_walk_right_review: 'art/animations/player_walk_right/sprite_sheet_review.png',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
