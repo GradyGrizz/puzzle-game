@@ -204,23 +204,25 @@ const Combat = {
     const facingHorizontal = Math.abs(e.faceX) > Math.abs(e.faceY);
     const facingRight = facingHorizontal && e.faceX > 0;
     const facingLeft = facingHorizontal && e.faceX < 0;
+    const attackDir = facingHorizontal ? 'right' : (e.faceY < 0 ? 'up' : 'down');
+    const sourceDir = facingLeft ? 'right' : attackDir;
+    const attack = typeof SKELETON_ATTACKS !== 'undefined' ? SKELETON_ATTACKS[sourceDir] : null;
     const attackElapsed = this.ENEMY.skeleton.windup - Math.max(0, e.timer);
     const frame = typeof spriteLabAttackFrameAt === 'function'
       ? spriteLabAttackFrameAt(attackElapsed) : 0;
-    const frameImage = typeof Art !== 'undefined' && Art.img
-      ? Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')] : null;
-    if (e.state === 'windup' && facingHorizontal && frameImage && Art._ready(frameImage)
+    const frameImage = attack && typeof Art !== 'undefined' && Art.img
+      ? Art.img[attack.prefix + String(frame + 1).padStart(2, '0')] : null;
+    if (e.state === 'windup' && frameImage && Art._ready(frameImage)
         && typeof spriteLabAttackImage === 'function') {
-      const scale = SKELETON_ATTACK_SCALE[frame];
-      const drawImg = spriteLabAttackImage(frameImage, frame);
-      // Frame 1's opaque body is 873px tall inside its 1254px canvas.
-      // A 1.61T canvas therefore produces the same ~1.12T body height as idle.
-      const box = T * 1.61 * scale;
+      const scale = attack.scale[frame];
+      const drawImg = spriteLabAttackImage(frameImage, sourceDir, frame);
+      // Each direction has a measured base box that matches its idle body height.
+      const box = T * attack.gameBox * scale;
       const iw = drawImg.naturalWidth || drawImg.width;
       const ih = drawImg.naturalHeight || drawImg.height;
       const fit = Math.min(box / iw, box / ih);
       const dw = Math.round(iw * fit), dh = Math.round(ih * fit);
-      const cy = y + T - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
+      const cy = y + T - (attack.feet[frame] - 0.5) * box;
       ctx.imageSmoothingEnabled = false;
       const centerX = Math.round(x + T / 2);
       const dy = Math.round(cy - dh / 2);

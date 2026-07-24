@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/24/2026 12:32am (mst)';
+const BUILD_STAMP = '7/24/2026 1:23am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -718,7 +718,7 @@ const ScreenDev = {
 // ══ SPRITE LAB (developer mode only) ══════════════════════════
 const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
-  { id: 'skeleton', name: 'SKELETON', sub: '7 ANIMATIONS' },
+  { id: 'skeleton', name: 'SKELETON', sub: '9 ANIMATIONS' },
   { id: 'dart', name: 'DART SENTRY', sub: '1 ANIMATION' },
 ];
 
@@ -738,6 +738,8 @@ const SPRITE_LAB_ANIMS = {
     { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
     { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
     { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
+    { label: 'ATTACK UP', dir: 'up', kind: 'attackFrames' },
+    { label: 'ATTACK DOWN', dir: 'down', kind: 'attackFrames' },
     { label: 'ATTACK LEFT', dir: 'left', kind: 'attackFrames' },
     { label: 'ATTACK RIGHT', dir: 'right', kind: 'attackFrames' },
     { label: 'RIG ATTACK RIGHT', dir: 'right', kind: 'rigAttack' },
@@ -753,17 +755,41 @@ function spriteLabFace(dir) {
   }[dir] || [0, 1];
 }
 
-// Normalize against frame 1's skull width. The generated later frames contain
-// a smaller character inside the same 1254px canvas, so fitting the whole
-// canvas equally makes the skeleton appear to shrink during the swing.
-const SKELETON_ATTACK_SCALE = [1, 1.036, 1.066, 1.142, 1.237, 1.345, 1.365, 1.336, 1.303, 1.303];
-const SKELETON_ATTACK_FEET = [1079, 1051, 1052, 1077, 998, 954, 957, 957, 961, 960];
-const SKELETON_ATTACK_COLOR = [
-  [1, 1, 1], [0.988, 1.003, 0.981], [0.965, 0.982, 0.956], [0.946, 0.982, 0.949],
-  [0.910, 0.968, 0.928], [0.898, 0.961, 0.904], [0.868, 0.942, 0.877],
-  [0.862, 0.959, 0.894], [0.919, 0.971, 0.955], [0.907, 0.984, 0.951],
-];
-const SKELETON_ATTACK_TINTED = [];
+// Direction-specific normalization keeps each generated frame at frame 1's
+// skull scale, sole baseline, and palette without altering the source PNGs.
+const SKELETON_ATTACKS = {
+  right: {
+    prefix: 'skeleton_attack_right_', gameBox: 1.61,
+    scale: [1, 1.036, 1.066, 1.142, 1.237, 1.345, 1.365, 1.336, 1.303, 1.303],
+    feet: [1079, 1051, 1052, 1077, 998, 954, 957, 957, 961, 960].map(v => v / 1254),
+    color: [
+      [1, 1, 1], [0.988, 1.003, 0.981], [0.965, 0.982, 0.956], [0.946, 0.982, 0.949],
+      [0.910, 0.968, 0.928], [0.898, 0.961, 0.904], [0.868, 0.942, 0.877],
+      [0.862, 0.959, 0.894], [0.919, 0.971, 0.955], [0.907, 0.984, 0.951],
+    ],
+  },
+  up: {
+    prefix: 'skeleton_attack_up_', gameBox: 1.98,
+    scale: [1, 1.015, 1.011, 1.074, 1.062, 1.150, 1.145, 1.127, 1.140, 1.366],
+    feet: [940, 933, 933, 929, 949, 958, 957, 957, 956, 927].map(v => v / 1254),
+    color: [
+      [1, 1, 1], [0.972, 1.002, 0.981], [0.947, 0.995, 0.958], [0.926, 0.981, 0.940],
+      [0.902, 0.980, 0.940], [0.919, 1.033, 1.011], [0.898, 1.048, 1.052],
+      [0.885, 1.059, 1.037], [0.894, 1.050, 1.037], [0.968, 1.102, 1.151],
+    ],
+  },
+  down: {
+    prefix: 'skeleton_attack_down_', gameBox: 2.15,
+    scale: [1, 1, 1.136, 1.141, 1.251, 1.289, 1.199, 1.194, 1.227, 1.183],
+    feet: [946/1315, 946/1315, 915/1312, 924/1312, 945/1311, 1040/1312, 1115/1312, 1117/1312, 1056/1312, 980/1312],
+    color: [
+      [1, 1, 1], [0.971, 0.989, 0.965], [0.948, 0.975, 0.911], [0.947, 0.967, 0.901],
+      [0.938, 0.995, 0.941], [0.915, 0.965, 0.899], [0.879, 0.907, 0.826],
+      [0.898, 0.959, 0.887], [0.952, 1.044, 0.999], [1.047, 1.104, 1.154],
+    ],
+  },
+};
+const SKELETON_ATTACK_TINTED = {};
 
 function spriteLabAttackFrameAt(t) {
   const liftFrames = 5, liftFps = 12, strikeFps = 18;
@@ -774,16 +800,17 @@ function spriteLabAttackFrameAt(t) {
   return Math.min(9, liftFrames + Math.floor((cycle - liftTime) * strikeFps));
 }
 
-function spriteLabAttackImage(img, frame) {
+function spriteLabAttackImage(img, direction, frame) {
   if (frame === 0 || !Art._ready(img)) return img;
-  if (SKELETON_ATTACK_TINTED[frame]) return SKELETON_ATTACK_TINTED[frame];
+  const cacheKey = direction + frame;
+  if (SKELETON_ATTACK_TINTED[cacheKey]) return SKELETON_ATTACK_TINTED[cacheKey];
   const cv = document.createElement('canvas');
   cv.width = img.naturalWidth; cv.height = img.naturalHeight;
   const c2 = cv.getContext('2d');
   c2.drawImage(img, 0, 0);
   try {
     const pixels = c2.getImageData(0, 0, cv.width, cv.height);
-    const d = pixels.data, gain = SKELETON_ATTACK_COLOR[frame];
+    const d = pixels.data, gain = SKELETON_ATTACKS[direction].color[frame];
     for (let i = 0; i < d.length; i += 4) {
       if (!d[i + 3]) continue;
       // Keep the cyan wind slash unchanged; color-match only the skeleton and sword.
@@ -796,7 +823,7 @@ function spriteLabAttackImage(img, frame) {
   } catch (e) {
     return img;
   }
-  SKELETON_ATTACK_TINTED[frame] = cv;
+  SKELETON_ATTACK_TINTED[cacheKey] = cv;
   return cv;
 }
 
@@ -809,10 +836,12 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   if (id === 'skeleton') {
     if (anim.kind === 'attackFrames') {
       const frame = spriteLabAttackFrameAt(t);
-      const img = Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')];
+      const sourceDir = anim.dir === 'left' ? 'right' : anim.dir;
+      const attack = SKELETON_ATTACKS[sourceDir];
+      const img = Art.img[attack.prefix + String(frame + 1).padStart(2, '0')];
       if (Art._ready(img)) {
-        const scale = SKELETON_ATTACK_SCALE[frame];
-        const drawImg = spriteLabAttackImage(img, frame);
+        const scale = attack.scale[frame];
+        const drawImg = spriteLabAttackImage(img, sourceDir, frame);
         ctx.imageSmoothingEnabled = false;
         // Scale around the feet instead of the canvas center so the downswing's
         // head movement remains motion, not an apparent full-body shrink.
@@ -824,9 +853,9 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
         // Keep the sole line fixed to frame 1 while letting the head, torso,
         // sword, and wind slash extend freely above and outside the usual box.
         const frameOneFeetY = y - tile * 0.28
-          + (SKELETON_ATTACK_FEET[0] / 1254 - 0.5) * tile * 2.65;
+          + (attack.feet[0] - 0.5) * tile * 2.65;
         const cy = frameOneFeetY
-          - (SKELETON_ATTACK_FEET[frame] / 1254 - 0.5) * box;
+          - (attack.feet[frame] - 0.5) * box;
         const dy = Math.round(cy - dh / 2);
         if (anim.dir === 'left') {
           ctx.save();
