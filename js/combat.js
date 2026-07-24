@@ -200,6 +200,26 @@ const Combat = {
   },
 
   _drawSkeleton(ctx, x, y, T, e) {
+    const sprite = typeof Art !== 'undefined' && Art.img && Art.img.skeleton;
+    if (sprite && Art._ready(sprite)) {
+      const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
+        ? (e.faceX < 0 ? 'left' : 'right')
+        : (e.faceY < 0 ? 'up' : 'down');
+      const frames = {
+        left:  [373, 175, 238, 319],
+        right: [927, 175, 237, 319],
+        up:    [429, 591, 231, 299],
+        down:  [882, 591, 232, 299],
+      };
+      const [sx, sy, sw, sh] = frames[dir];
+      const dh = Math.round(T * 1.12);
+      const dw = Math.round(dh * sw / sh);
+      const dx = Math.round(x + (T - dw) / 2);
+      const dy = Math.round(y + T - dh);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sprite, sx, sy, sw, sh, dx, dy, dw, dh);
+      return;
+    }
     const w = Math.max(2, Math.floor(T / 9));
     ctx.fillStyle = '#e4dfc6';
     ctx.fillRect(x + T * 0.31, y + T * 0.12, T * 0.38, T * 0.28);

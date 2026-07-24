@@ -707,6 +707,7 @@ ASSETS: {
   relic_boots: 'art/relic_boots.png',
   mi_sword: 'art/mi_sword.png', mi_depth: 'art/mi_depth.png', mi_clock: 'art/mi_clock.png',
   mi_cart: 'art/mi_cart.png', mi_gear: 'art/mi_gear.png',
+  skeleton: 'art/skeleton.png',
 },
 img: {},
 loadAssets() {
