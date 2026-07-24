@@ -211,7 +211,9 @@ const Combat = {
         && typeof spriteLabAttackImage === 'function') {
       const scale = SKELETON_ATTACK_SCALE[frame];
       const drawImg = spriteLabAttackImage(frameImage, frame);
-      const box = T * 2.65 * scale;
+      // Frame 1's opaque body is 873px tall inside its 1254px canvas.
+      // A 1.61T canvas therefore produces the same ~1.12T body height as idle.
+      const box = T * 1.61 * scale;
       const iw = drawImg.naturalWidth || drawImg.width;
       const ih = drawImg.naturalHeight || drawImg.height;
       const fit = Math.min(box / iw, box / ih);
