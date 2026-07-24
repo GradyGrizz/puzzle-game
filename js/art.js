@@ -697,6 +697,7 @@ ASSETS: {
   player_idle_down: 'art/player_idle/player_idle_down.png',
   player_idle_left: 'art/player_idle/player_idle_left.png',
   player_idle_right: 'art/player_idle/player_idle_right.png',
+  player_walk_right: 'art/animations/player_walk_right/sprite_sheet.png',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
@@ -790,8 +791,43 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
+  // The approved right-facing eight-frame sheet powers both side directions.
+  // Left is a pixel-exact horizontal mirror; no second generated cycle needed.
+  const sideWalk = this.img && this.img.player_walk_right;
+  if (!pushing && idle === false && (dir === 'right' || dir === 'left') &&
+      sideWalk && this._ready(sideWalk)) {
+    const count = 8;
+    const sw = Math.floor(sideWalk.naturalWidth / count);
+    const sh = sideWalk.naturalHeight;
+    const walkFrame = ((frame % count) + count) % count;
+    const sx = walkFrame * sw;
+    const dh = Math.round(tile * 1.05);
+    const dw = Math.round(dh * sw / sh);
+    const dx = px + ((tile - dw) >> 1);
+    const dy = py + tile - dh;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.imageSmoothingEnabled = false;
+    if (dir === 'left') {
+      ctx.save();
+      ctx.translate(dx + dw, dy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(sideWalk, sx, 0, sw, sh, 0, 0, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.drawImage(sideWalk, sx, 0, sw, sh, dx, dy, dw, dh);
+    }
+    return;
+  }
+
   // Until new walk/push cycles are approved, every player state intentionally
-  // uses one of the four new directional idle sprites.
+  // uses one of the four new directional idle sprites. Side walking is the
+  // exception above; up/down walk and every push remain placeholders.
   const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);
