@@ -764,6 +764,15 @@ const SKELETON_ATTACK_COLOR = [
 ];
 const SKELETON_ATTACK_TINTED = [];
 
+function spriteLabAttackFrameAt(t) {
+  const liftFrames = 5, liftFps = 12, strikeFps = 18;
+  const liftTime = liftFrames / liftFps;
+  const cycleTime = liftTime + (10 - liftFrames) / strikeFps;
+  const cycle = t % cycleTime;
+  if (cycle < liftTime) return Math.min(liftFrames - 1, Math.floor(cycle * liftFps));
+  return Math.min(9, liftFrames + Math.floor((cycle - liftTime) * strikeFps));
+}
+
 function spriteLabAttackImage(img, frame) {
   if (frame === 0 || !Art._ready(img)) return img;
   if (SKELETON_ATTACK_TINTED[frame]) return SKELETON_ATTACK_TINTED[frame];
@@ -798,7 +807,7 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   }
   if (id === 'skeleton') {
     if (anim.kind === 'attackFrames') {
-      const frame = Math.floor(t * 12) % 10;
+      const frame = spriteLabAttackFrameAt(t);
       const img = Art.img['skeleton_attack_right_' + String(frame + 1).padStart(2, '0')];
       if (Art._ready(img)) {
         const scale = SKELETON_ATTACK_SCALE[frame];
