@@ -719,7 +719,7 @@ const ScreenDev = {
 const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
   { id: 'skeleton', name: 'SKELETON', sub: '9 ANIMATIONS' },
-  { id: 'dart', name: 'DART SENTRY', sub: '1 ANIMATION' },
+  { id: 'dart', name: 'MASKED TRIBALIST', sub: '1 ANIMATION' },
 ];
 
 const SPRITE_LAB_ANIMS = {

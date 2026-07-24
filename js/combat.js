@@ -283,6 +283,28 @@ const Combat = {
   },
 
   _drawDarter(ctx, x, y, T, e) {
+    const sprite = typeof Art !== 'undefined' && Art.img && Art.img.masked_tribalist;
+    if (sprite && Art._ready(sprite)) {
+      const dir = Math.abs(e.faceX || 0) > Math.abs(e.faceY || 0)
+        ? (e.faceX < 0 ? 'left' : 'right')
+        : (e.faceY < 0 ? 'up' : 'down');
+      const frames = {
+        left:  [343, 1, 102, 193],
+        right: [58, 0, 100, 194],
+        up:    [60, 307, 114, 196],
+        down:  [328, 309, 112, 194],
+      };
+      const [sx, sy, sw, sh] = frames[dir];
+      // Share the skeleton's foot line and top height. The feathered silhouette
+      // fills that height, leaving the tribalist's body intentionally smaller.
+      const dh = Math.round(T * 1.12);
+      const dw = Math.round(dh * sw / sh);
+      const dx = Math.round(x + (T - dw) / 2);
+      const dy = Math.round(y + T - dh);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sprite, sx, sy, sw, sh, dx, dy, dw, dh);
+      return;
+    }
     ctx.fillStyle = e.state === 'windup' ? '#d96a4e' : '#7762a8';
     ctx.fillRect(x + T * 0.22, y + T * 0.24, T * 0.56, T * 0.54);
     ctx.fillStyle = '#d8c8a0';
