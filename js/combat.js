@@ -24,7 +24,6 @@ const Combat = {
           id: s.id || ('enemy-' + i), type, x: s.c + 0.5, y: s.r + 0.5,
           hp: cfg.hp, maxHp: cfg.hp, state: 'idle', timer: 0,
           cooldown: (i % 3) * 0.18, flash: 0, dead: false, faceX: 0, faceY: 1,
-          moving: false,
         };
       }),
       projectiles: [],
@@ -100,7 +99,6 @@ const Combat = {
   },
 
   _updateEnemy(state, e, world, player, dt, events) {
-    e.moving = false;
     const cfg = this.ENEMY[e.type];
     let dx = player.x - e.x, dy = player.y - e.y;
     const dist = Math.hypot(dx, dy) || 0.001;
@@ -137,12 +135,10 @@ const Combat = {
   },
 
   _move(e, dx, dy, step, world) {
-    const ox = e.x, oy = e.y;
     const nx = e.x + dx * step;
     if (!world.solid(nx, e.y, 0.27)) e.x = nx;
     const ny = e.y + dy * step;
     if (!world.solid(e.x, ny, 0.27)) e.y = ny;
-    e.moving = Math.abs(e.x - ox) + Math.abs(e.y - oy) > 0.0001;
   },
 
   _updateProjectiles(state, world, player, dt, events) {
@@ -183,7 +179,7 @@ const Combat = {
       ctx.save();
       if (e.flash > 0) ctx.globalAlpha = 0.45 + 0.55 * Math.sin(t * 55);
       if (e.dead) ctx.globalAlpha = Math.max(0, 1 + e.timer / 0.35);
-      if (e.type === 'skeleton') this._drawSkeleton(ctx, x, y, T, e, t);
+      if (e.type === 'skeleton') this._drawSkeleton(ctx, x, y, T, e);
       else this._drawDarter(ctx, x, y, T, e);
       ctx.restore();
     }
@@ -203,22 +199,7 @@ const Combat = {
     }
   },
 
-  _drawSkeleton(ctx, x, y, T, e, t) {
-    const walk = typeof Art !== 'undefined' && Art.img && Art.img.skeleton_walk;
-    if (e.moving && walk && Art._ready(walk)) {
-      const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
-        ? (e.faceX < 0 ? 'left' : 'right')
-        : (e.faceY < 0 ? 'up' : 'down');
-      const row = { down: 0, left: 1, right: 2, up: 3 }[dir];
-      const frame = Math.floor(t * 10) % 8;
-      const sw = walk.naturalWidth / 8, sh = walk.naturalHeight / 4;
-      const dh = Math.round(T * 1.78), dw = Math.round(dh * sw / sh);
-      const dx = Math.round(x + (T - dw) / 2);
-      const dy = Math.round(y + T - dh);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(walk, frame * sw, row * sh, sw, sh, dx, dy, dw, dh);
-      return;
-    }
+  _drawSkeleton(ctx, x, y, T, e) {
     const sprite = typeof Art !== 'undefined' && Art.img && Art.img.skeleton;
     if (sprite && Art._ready(sprite)) {
       const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
