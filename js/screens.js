@@ -278,6 +278,7 @@ const ScreenMenu = {
       { label: 'SETTINGS', icon: 'gear', action: () => App.setScreen('settings') },
     );
     if (Save.devOn()) items.push(
+      { label: 'SPRITE LAB', sub: 'CHARACTERS + ANIMATIONS', icon: 'play', action: () => App.setScreen('spriteLab') },
       { label: 'TEST DUNGEON', sub: 'ALL SYSTEMS TESTING GROUND', icon: 'sword', action: () => App.setScreen('game', { gameMode: 'test' }) },
     );
     this.list = new MenuList(items);
@@ -712,5 +713,200 @@ const ScreenDev = {
   onConfirm() { this._sel = this.list.sel; this.list.activate(); },
   onTap(x, y) { this._sel = this.list.sel; this.list.tapAt(x, y); },
   onBack() { Snd.back(); App.setScreen('settings'); },
+};
+
+// ══ SPRITE LAB (developer mode only) ══════════════════════════
+const SPRITE_LAB_CHARACTERS = [
+  { id: 'hero', name: 'DELVER', sub: '8 ANIMATIONS' },
+  { id: 'skeleton', name: 'SKELETON', sub: '5 ANIMATIONS' },
+  { id: 'dart', name: 'DART SENTRY', sub: '1 ANIMATION' },
+];
+
+const SPRITE_LAB_ANIMS = {
+  hero: [
+    { label: 'WALK UP', dir: 'up', kind: 'walk' },
+    { label: 'WALK DOWN', dir: 'down', kind: 'walk' },
+    { label: 'WALK LEFT', dir: 'left', kind: 'walk' },
+    { label: 'WALK RIGHT', dir: 'right', kind: 'walk' },
+    { label: 'PUSH UP', dir: 'up', kind: 'push' },
+    { label: 'PUSH DOWN', dir: 'down', kind: 'push' },
+    { label: 'PUSH LEFT', dir: 'left', kind: 'push' },
+    { label: 'PUSH RIGHT', dir: 'right', kind: 'push' },
+  ],
+  skeleton: [
+    { label: 'IDLE UP', dir: 'up', kind: 'idle' },
+    { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
+    { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
+    { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
+    { label: 'ATTACK RIGHT', dir: 'right', kind: 'attack' },
+  ],
+  dart: [
+    { label: 'IDLE', dir: 'down', kind: 'idle' },
+  ],
+};
+
+function spriteLabFace(dir) {
+  return {
+    up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
+  }[dir] || [0, 1];
+}
+
+function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
+  if (id === 'hero') {
+    const frame = Math.floor(t * 8) % 4;
+    Art.hero(ctx, anim.dir, frame, Math.round(x - tile / 2), Math.round(y - tile), tile, anim.kind === 'push', false);
+    return;
+  }
+  if (id === 'skeleton') {
+    const face = spriteLabFace(anim.dir);
+    const attacking = anim.kind === 'attack';
+    const cycle = (t * 1.65) % 1;
+    const e = {
+      faceX: face[0], faceY: face[1],
+      state: attacking ? 'windup' : 'idle',
+      timer: attacking ? Combat.ENEMY.skeleton.windup * (1 - cycle) : 0,
+    };
+    Combat._drawSkeleton(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, e);
+    return;
+  }
+  Combat._drawDarter(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, { state: 'idle' });
+}
+
+const ScreenSpriteLab = {
+  t: 0, sel: 0, cards: [],
+  enter() {
+    if (!Save.devOn()) { App.setScreen('menu'); return; }
+    this.t = 0; this.sel = 0; this.cards = [];
+  },
+  update(dt) { this.t += dt; },
+  draw(ctx, W, H) {
+    drawBackdrop(ctx, W, H, this.t);
+    const s = Math.max(2, Math.floor(W / 240));
+    drawText(ctx, 'SPRITE LAB', W / 2, 24, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, 'CHOOSE A CHARACTER', W / 2, 24 + 8 * (s + 1) + 5, 1, PAL.uiDim, 'center');
+    drawText(ctx, '◀ BACK', 14, 10, 1, PAL.uiDim, 'left');
+
+    const gap = 14;
+    const totalW = Math.min(W - 32, 660);
+    const cardW = Math.floor((totalW - gap * 2) / 3);
+    const cardH = Math.min(230, H - 105);
+    const startX = Math.round((W - (cardW * 3 + gap * 2)) / 2);
+    const y = Math.max(78, Math.round((H - cardH) / 2 + 18));
+    this.cards = [];
+    for (let i = 0; i < SPRITE_LAB_CHARACTERS.length; i++) {
+      const ch = SPRITE_LAB_CHARACTERS[i];
+      const x = startX + i * (cardW + gap);
+      const selected = i === this.sel;
+      this.cards.push({ x, y, w: cardW, h: cardH });
+      Art.panel(ctx, x, y, cardW, cardH);
+      if (selected) {
+        ctx.fillStyle = PAL.goldHi;
+        ctx.fillRect(x, y, cardW, 3); ctx.fillRect(x, y + cardH - 3, cardW, 3);
+        ctx.fillRect(x, y, 3, cardH); ctx.fillRect(x + cardW - 3, y, 3, cardH);
+      }
+      const anim = SPRITE_LAB_ANIMS[ch.id][0];
+      const tile = Math.min(92, cardW * 0.55, cardH * 0.50);
+      drawSpriteLabCharacter(ctx, ch.id, anim, this.t, x + cardW / 2, y + cardH * 0.58, tile);
+      drawTextFit(ctx, ch.name, x + cardW / 2, y + 16, cardW - 20, s, selected ? PAL.goldHi : PAL.ui, 'center', '#000');
+      drawTextFit(ctx, ch.sub, x + cardW / 2, y + cardH - 24, cardW - 16, 1, PAL.uiDim, 'center');
+    }
+  },
+  _open() {
+    const ch = SPRITE_LAB_CHARACTERS[this.sel];
+    if (!ch) return;
+    Snd.select();
+    App.setScreen('spriteDetail', { character: ch.id });
+  },
+  onDirPress(dc, dr) {
+    if (!dc) return;
+    this.sel = (this.sel + dc + SPRITE_LAB_CHARACTERS.length) % SPRITE_LAB_CHARACTERS.length;
+    Snd.blip();
+  },
+  onDirRelease() {},
+  onConfirm() { this._open(); },
+  onTap(x, y) {
+    if (y < 42 && x < 105) { this.onBack(); return; }
+    for (let i = 0; i < this.cards.length; i++) {
+      const r = this.cards[i];
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+        this.sel = i; this._open(); return;
+      }
+    }
+  },
+  onBack() { Snd.back(); App.setScreen('menu'); },
+};
+
+const ScreenSpriteDetail = {
+  t: 0, sel: 0, character: 'hero', buttons: [],
+  enter(params) {
+    if (!Save.devOn()) { App.setScreen('menu'); return; }
+    this.character = params.character && SPRITE_LAB_ANIMS[params.character] ? params.character : 'hero';
+    this.t = 0; this.sel = 0; this.buttons = [];
+  },
+  update(dt) { this.t += dt; },
+  draw(ctx, W, H) {
+    drawBackdrop(ctx, W, H, this.t);
+    const ch = SPRITE_LAB_CHARACTERS.find(c => c.id === this.character);
+    const anims = SPRITE_LAB_ANIMS[this.character];
+    const s = Math.max(2, Math.floor(W / 240));
+    drawText(ctx, ch.name + ' ANIMATIONS', W / 2, 20, s + 1, PAL.goldHi, 'center', '#000');
+    drawText(ctx, 'TAP AN ANIMATION TO PLAY IT', W / 2, 20 + 8 * (s + 1) + 5, 1, PAL.uiDim, 'center');
+    drawText(ctx, '◀ CHARACTERS', 14, 10, 1, PAL.uiDim, 'left');
+
+    const previewW = Math.min(260, W * 0.34);
+    const previewX = 20, previewY = 76, previewH = H - previewY - 18;
+    Art.panel(ctx, previewX, previewY, previewW, previewH);
+    const anim = anims[this.sel];
+    const tile = Math.min(112, previewW * 0.55, previewH * 0.58);
+    drawSpriteLabCharacter(ctx, this.character, anim, this.t, previewX + previewW / 2, previewY + previewH * 0.63, tile);
+    drawTextFit(ctx, anim.label, previewX + previewW / 2, previewY + 18, previewW - 20, s, PAL.goldHi, 'center', '#000');
+    drawText(ctx, 'PLAYING', previewX + previewW / 2, previewY + previewH - 24, 1, PAL.uiDim, 'center');
+
+    const gridX = previewX + previewW + 18;
+    const gridW = W - gridX - 20;
+    const cols = anims.length > 1 ? 2 : 1;
+    const gap = 10;
+    const bw = Math.floor((gridW - gap * (cols - 1)) / cols);
+    const rows = Math.ceil(anims.length / cols);
+    const bh = Math.min(52, Math.floor((H - 92 - gap * (rows - 1)) / rows));
+    const startY = 78;
+    this.buttons = [];
+    for (let i = 0; i < anims.length; i++) {
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = gridX + col * (bw + gap), y = startY + row * (bh + gap);
+      const selected = i === this.sel;
+      this.buttons.push({ x, y, w: bw, h: bh });
+      ctx.fillStyle = selected ? '#241a24' : '#0d1120'; ctx.fillRect(x, y, bw, bh);
+      ctx.fillStyle = selected ? PAL.goldHi : 'rgba(255,255,255,0.14)';
+      ctx.fillRect(x, y, bw, 2); ctx.fillRect(x, y + bh - 2, bw, 2);
+      ctx.fillRect(x, y, 2, bh); ctx.fillRect(x + bw - 2, y, 2, bh);
+      if (selected) { ctx.fillStyle = PAL.gold; ctx.fillRect(x, y, 5, bh); }
+      drawTextFit(ctx, anims[i].label, x + bw / 2, y + Math.round((bh - 7 * s) / 2), bw - 20, s, selected ? PAL.goldHi : PAL.ui, 'center', '#000');
+    }
+  },
+  _select(i) {
+    const anims = SPRITE_LAB_ANIMS[this.character];
+    if (i < 0 || i >= anims.length) return;
+    this.sel = i; this.t = 0; Snd.select();
+  },
+  onDirPress(dc, dr) {
+    const anims = SPRITE_LAB_ANIMS[this.character];
+    const cols = anims.length > 1 ? 2 : 1;
+    let next = this.sel;
+    if (dc) next += dc;
+    else if (dr) next += dr * cols;
+    next = Math.max(0, Math.min(anims.length - 1, next));
+    if (next !== this.sel) { this.sel = next; this.t = 0; Snd.blip(); }
+  },
+  onDirRelease() {},
+  onConfirm() { this.t = 0; Snd.select(); },
+  onTap(x, y) {
+    if (y < 42 && x < 125) { this.onBack(); return; }
+    for (let i = 0; i < this.buttons.length; i++) {
+      const r = this.buttons[i];
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) { this._select(i); return; }
+    }
+  },
+  onBack() { Snd.back(); App.setScreen('spriteLab'); },
 };
 

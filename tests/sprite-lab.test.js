@@ -1,0 +1,40 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+let failed = 0;
+function expect(name, ok) {
+  if (ok) console.log('  OK  ' + name);
+  else { console.error('FAIL  ' + name); failed++; }
+}
+
+const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'screens.js'), 'utf8');
+const start = source.indexOf('const SPRITE_LAB_CHARACTERS');
+const end = source.indexOf('function spriteLabFace', start);
+const catalogSource = source.slice(start, end)
+  .replace('const SPRITE_LAB_CHARACTERS', 'globalThis.SPRITE_LAB_CHARACTERS')
+  .replace('const SPRITE_LAB_ANIMS', 'globalThis.SPRITE_LAB_ANIMS');
+const sandbox = {};
+vm.runInNewContext(catalogSource, sandbox);
+
+const chars = sandbox.SPRITE_LAB_CHARACTERS;
+const anims = sandbox.SPRITE_LAB_ANIMS;
+
+expect('sprite lab lists every current character', chars.map(c => c.id).join(',') === 'hero,skeleton,dart');
+expect('hero has exactly eight animations', anims.hero.length === 8);
+expect('hero has four walking directions',
+  anims.hero.filter(a => a.kind === 'walk').map(a => a.dir).sort().join(',') === 'down,left,right,up');
+expect('hero has four pushing directions',
+  anims.hero.filter(a => a.kind === 'push').map(a => a.dir).sort().join(',') === 'down,left,right,up');
+expect('skeleton attack catalog only includes attack right',
+  anims.skeleton.filter(a => a.kind === 'attack').map(a => a.dir).join(',') === 'right');
+expect('dart sentry exposes its current idle animation',
+  anims.dart.length === 1 && anims.dart[0].kind === 'idle');
+
+if (failed) {
+  console.error('\n' + failed + ' SPRITE LAB TEST(S) FAILED');
+  process.exit(1);
+}
+console.log('\nALL SPRITE LAB TESTS PASSED');

@@ -31,6 +31,8 @@ const App = {
       timed: ScreenTimed,
       shop: ScreenShop,
       dev: ScreenDev,
+      spriteLab: ScreenSpriteLab,
+      spriteDetail: ScreenSpriteDetail,
     };
 
     Art.setSkin(Save.data.shop.skin);
