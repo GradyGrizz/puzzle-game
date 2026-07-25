@@ -924,7 +924,10 @@ const ScreenGame = {
       // time-based clock rather than the brisk distance-based walk cadence.
       const shoving = !!this.blockSlide || (this.pushGrace > 0 && this.pmoving && this.pushDir === this.pdir);
       if (shoving) this.pframe = 1 + Math.floor(this.t * 5) % 4;
-      else this.pframe = this.pmoving ? (1 + Math.floor(this.walkPhase * 5) % 4) : 0;
+      // FM.SPEED is 3.6 tiles/sec; 10/3 converts full-speed distance to 12 fps.
+      // walkPhase resets to zero when movement begins, avoiding a random-frame
+      // pop between the idle pose and the first step.
+      else this.pframe = this.pmoving ? Math.floor(this.walkPhase * (10 / 3)) % 8 : 0;
       if (this.gameMode === 'challenge' && this.movesLeft() === 0) { this._runOver(); return; }
     }
 

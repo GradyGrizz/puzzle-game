@@ -791,8 +791,41 @@ _activeSheet() {
 },
 
 hero(ctx, dir, frame, px, py, tile, pushing, idle) {
-  // Until new walk/push cycles are approved, every player state intentionally
-  // uses one of the four new directional idle sprites.
+  // The approved right-facing walk strip is also the left-facing cycle when
+  // mirrored. Every cell has the same canvas and baseline as the idle sprites,
+  // preventing frame-to-frame resizing or foot-line jitter in gameplay.
+  const walkSheet = this.img && this.img.player_walk_right_review;
+  if (!pushing && !idle && (dir === 'right' || dir === 'left') &&
+      walkSheet && this._ready(walkSheet)) {
+    const frameCount = 8;
+    const sw = Math.floor(walkSheet.naturalWidth / frameCount);
+    const sh = walkSheet.naturalHeight;
+    const sx = (frame % frameCount) * sw;
+    const dh = Math.round(tile * 1.05);
+    const dw = Math.round(dh * sw / sh);
+    const dx = px + ((tile - dw) >> 1);
+    const dy = py + tile - dh;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(px + tile / 2, py + tile - 3, tile * 0.28, tile * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.imageSmoothingEnabled = false;
+    if (dir === 'left') {
+      ctx.save();
+      ctx.translate(dx + dw, dy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(walkSheet, sx, 0, sw, sh, 0, 0, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.drawImage(walkSheet, sx, 0, sw, sh, dx, dy, dw, dh);
+    }
+    return;
+  }
+
+  // Idle and vertical movement continue using the approved directional poses.
   const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);

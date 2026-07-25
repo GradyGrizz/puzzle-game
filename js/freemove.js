@@ -123,8 +123,11 @@ const FM = {
     if (vx) this._axis(g, vx * step, 0, contacts);
     if (vy) this._axis(g, 0, vy * step, contacts);
 
+    const wasMoving = !!g.pmoving;
     g.pmoving = moving;
-    if (moving) g.walkPhase = (g.walkPhase || 0) + step * mag;
+    // Begin every new walk from the neutral first frame. While held, advance by
+    // distance so analog movement cannot make the feet cycle faster than travel.
+    if (moving) g.walkPhase = wasMoving ? (g.walkPhase || 0) + step * mag : 0;
 
     this._contacts(g, contacts, dt, events);
     this._cell(g, events);
