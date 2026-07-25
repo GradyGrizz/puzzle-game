@@ -29,7 +29,9 @@ expect('horizontal gameplay movement selects the approved walk sheet',
 expect('left gameplay movement mirrors the approved right cycle',
   art.includes("if (dir === 'left')") && art.includes('ctx.scale(-1, 1)'));
 expect('gameplay advances the walk cycle at twelve frames per second',
-  game.includes('Math.floor(this.walkPhase * (10 / 3)) % 8'));
+  game.includes('Math.floor(this.walkPhase * 5) % 8'));
+expect('normal movement uses the animation-matched 2.4 tile speed',
+  freeMove.includes('SPEED: 2.4'));
 expect('a new walk begins on the neutral first frame',
   freeMove.includes('const wasMoving = !!g.pmoving') &&
   freeMove.includes(': 0;'));

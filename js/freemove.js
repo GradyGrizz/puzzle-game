@@ -13,7 +13,7 @@
 
 const FM = {
   HALF: 0.30,        // half hitbox width (≈0.6 tile)
-  SPEED: 3.6,        // tiles / second
+  SPEED: 2.4,        // tiles / second
   PUSH_T: 0.24,      // seconds of shoving before a block slides
   ALIGN: 12,         // how fast pushing snaps you into the block's lane
 
