@@ -33,8 +33,16 @@ expect('gameplay advances the walk cycle at twelve frames per second',
 expect('a new walk begins on the neutral first frame',
   freeMove.includes('const wasMoving = !!g.pmoving') &&
   freeMove.includes(': 0;'));
+expect('full-stride frames add a symmetrical whole-body bob',
+  art.includes('[0, 0, 1, 0, 0, 0, 1, 0]') &&
+  sourceHasSpriteLabBob());
 expect('idle and vertical movement retain directional idle sprites',
   art.includes("this.img['player_idle_' + dir]"));
+
+function sourceHasSpriteLabBob() {
+  const screens = fs.readFileSync(path.join(root, 'js', 'screens.js'), 'utf8');
+  return screens.includes('[0, 0, 1, 0, 0, 0, 1, 0]');
+}
 
 if (failed) {
   console.error('\n' + failed + ' PLAYER WALK TEST(S) FAILED');

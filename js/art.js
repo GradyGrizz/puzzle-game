@@ -804,7 +804,12 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     const dh = Math.round(tile * 1.05);
     const dw = Math.round(dh * sw / sh);
     const dx = px + ((tile - dw) >> 1);
-    const dy = py + tile - dh;
+    // A tiny whole-body drop on each full-stride contact keeps the walk from
+    // reading as a rigid torso with independently moving limbs. Frame 1 stays
+    // pixel-aligned with idle, and the feet retain their existing artwork.
+    const bob = [0, 0, 1, 0, 0, 0, 1, 0][frame % frameCount] *
+      Math.max(1, Math.round(tile / 30));
+    const dy = py + tile - dh + bob;
     ctx.save();
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#000';

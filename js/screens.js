@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/25/2026 10:33am (mst)';
+const BUILD_STAMP = '7/25/2026 11:41am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -846,7 +846,9 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
       const dh = Math.round(tile * 1.05);
       const dw = Math.round(dh * sw / sh);
       const dx = Math.round(x - dw / 2);
-      const dy = Math.round(y - dh);
+      const bob = [0, 0, 1, 0, 0, 0, 1, 0][frame] *
+        Math.max(1, Math.round(tile / 30));
+      const dy = Math.round(y - dh + bob);
       ctx.save();
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = '#000';
