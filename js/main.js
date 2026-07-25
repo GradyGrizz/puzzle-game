@@ -6,6 +6,7 @@ const App = {
   canvas: null, ctx: null,
   screen: null, screenName: '',
   isTouch: ('ontouchstart' in window) || navigator.maxTouchPoints > 0,
+  portraitBlocked: false,
   transition: null, // {phase:'out'|'in', t, next, params}
 
   screens: {},
@@ -39,7 +40,22 @@ const App = {
     Art.setTheme(Save.data.shop.theme);
 
     this.resize();
+    this.requestLandscape(false);
     window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => {
+      this.requestLandscape(false);
+      setTimeout(() => this.resize(), 120);
+    });
+    document.addEventListener('fullscreenchange', () => {
+      this.requestLandscape(false);
+      this.resize();
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => this.resize());
+    }
+    // Mobile browsers generally require a user gesture before fullscreen or
+    // orientation locking. The portrait blocker receives this first tap.
+    window.addEventListener('pointerdown', () => this.requestLandscape(true), { passive: true });
 
     Art.loadSprites(() => {});
     this.bindInput();
@@ -50,6 +66,9 @@ const App = {
   safeTop: 0, framed: false,
   resize() {
     const dpr = window.devicePixelRatio || 1;
+    this.portraitBlocked = window.matchMedia('(orientation: portrait)').matches ||
+      window.innerHeight > window.innerWidth;
+    document.body.classList.toggle('portrait-blocked', this.portraitBlocked);
     this._applyFrame();                       // may resize #device (desktop bezel)
     const dev = document.getElementById('device');
     this.W = dev.clientWidth;
@@ -63,6 +82,32 @@ const App = {
     this.canvas.style.height = this.H + 'px';
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
+  },
+
+  requestLandscape(fromGesture) {
+    const orientation = screen.orientation;
+    const lock = () => {
+      if (orientation && orientation.lock) {
+        try {
+          const result = orientation.lock('landscape');
+          if (result && result.catch) result.catch(() => {});
+        } catch (_) {}
+      }
+    };
+    if (fromGesture && this.isTouch && this.portraitBlocked &&
+        !document.fullscreenElement && !document.webkitFullscreenElement) {
+      const root = document.documentElement;
+      const enter = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (enter) {
+        try {
+          const result = enter.call(root);
+          if (result && result.then) result.then(lock).catch(() => {});
+          else lock();
+        } catch (_) {}
+        return;
+      }
+    }
+    lock();
   },
 
   // On a mouse-driven, roomy window, present the game inside a centred
@@ -114,6 +159,11 @@ const App = {
   lastTs: 0,
   loop(ts) {
     requestAnimationFrame(t => this.loop(t));
+    // Portrait never runs or renders the game behind the rotate-device screen.
+    if (this.portraitBlocked) {
+      this.lastTs = ts;
+      return;
+    }
     const dt = Math.min(0.05, (ts - this.lastTs) / 1000) || 0.016;
     this.lastTs = ts;
 

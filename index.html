@@ -34,10 +34,47 @@ canvas {
    so the site reads as a portrait app instead of a stretched full screen. */
 #device {
   position: relative;
-  width: 100%; height: 100dvh;
+  width: 100vw; height: 100dvh;
   overflow: hidden;
   background: #08090e;
 }
+#landscape-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: max(28px, env(safe-area-inset-top))
+           max(28px, env(safe-area-inset-right))
+           max(28px, env(safe-area-inset-bottom))
+           max(28px, env(safe-area-inset-left));
+  color: #f0c850;
+  background: #08090e;
+  text-align: center;
+  letter-spacing: 2px;
+  pointer-events: auto;
+}
+#landscape-lock .rotate-icon {
+  font-size: 58px;
+  line-height: 1;
+  transform: rotate(90deg);
+}
+#landscape-lock strong { font-size: 18px; }
+#landscape-lock span {
+  max-width: 280px;
+  color: #a6a39a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (orientation: portrait) {
+  #device { visibility: hidden !important; }
+  #landscape-lock { display: flex; }
+}
+body.portrait-blocked #device { visibility: hidden !important; }
+body.portrait-blocked #landscape-lock { display: flex; }
 body.framed {
   background: radial-gradient(circle at 50% 38%, #16171d, #050506 72%);
   display: flex; align-items: center; justify-content: center;
@@ -189,6 +226,11 @@ body.scheme-joystick .acts-left .ab .ab-lbl { font-size: 8px; }
     <div class="cbtn" id="btn-sword" aria-label="Sword"><span class="ab-ico">&#9876;</span><span class="ab-lbl">ATTACK</span></div>
   </div>
 </div>
+</div>
+<div id="landscape-lock" role="alert" aria-live="assertive">
+  <div class="rotate-icon">&#8635;</div>
+  <strong>LANDSCAPE REQUIRED</strong>
+  <span>Rotate your device sideways. Portrait mode is disabled.</span>
 </div>
 <script src="js/font.js"></script>
 <script src="js/audio.js"></script>
