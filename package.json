@@ -1,0 +1,27 @@
+{
+  "name": "puzzle-game",
+  "version": "1.0.0",
+  "description": "A retro, Zelda-inspired dungeon puzzle game.",
+  "scripts": {
+    "build:native": "node scripts/build-native.cjs",
+    "cap:sync": "npm run build:native && cap sync",
+    "cap:open:ios": "cap open ios",
+    "test": "node tests/levels.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GradyGrizz/puzzle-game.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/GradyGrizz/puzzle-game/issues"
+  },
+  "homepage": "https://github.com/GradyGrizz/puzzle-game#readme",
+  "dependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2"
+  }
+}

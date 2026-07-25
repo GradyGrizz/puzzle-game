@@ -7,17 +7,15 @@ a TestFlight build. Steps below run on a Mac with Xcode 15+.
 ## 1. Wrap in Capacitor
 
 ```sh
-npm init -y
-npm install @capacitor/core @capacitor/cli @capacitor/ios
-npx cap init "Delve" "com.yourteam.delve" --web-dir .
-npx cap add ios
-npx cap sync
-npx cap open ios
+npm install
+npm run cap:sync
+npm run cap:open:ios
 ```
 
 Notes:
 
-- `--web-dir .` — the repo root IS the web build; there is no bundler.
+- `npm run cap:sync` stages the static game in `www/`, then copies it
+  into the native project.
 - Capacitor serves over a local custom scheme, so `getImageData` (skin
   recoloring) and `localStorage` both work without the file:// caveats.
 
@@ -27,7 +25,7 @@ In Xcode:
 
 - **Display name**: Delve. **Bundle ID**: match App Store Connect.
 - **Deployment target**: iOS 14+.
-- **Device orientation**: Portrait only (the layout is portrait-first).
+- **Device orientation**: Landscape Left and Landscape Right only.
 - **Status bar**: hidden or dark content; the page already handles
   `viewport-fit=cover` and safe-area insets.
 - **App icon**: `icons/icon-1024.png` is the 1024 master; drop it into
