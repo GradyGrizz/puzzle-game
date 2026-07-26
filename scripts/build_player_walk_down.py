@@ -155,32 +155,32 @@ def make_step(
 def main():
     idle = Image.open(IDLE_PATH).convert("RGBA")
     transition_a = make_step(
-        idle, 6, -4,
-        left_arm_delta=(-1, -5),
-        right_arm_delta=(1, 5),
-        left_boot_delta=(-2, 4),
-        right_boot_delta=(2, -5),
+        idle, 6, -6,
+        left_arm_delta=(-3, -7),
+        right_arm_delta=(-3, 7),
+        left_boot_delta=(-3, 7),
+        right_boot_delta=(3, -9),
     )
     full_a = make_step(
-        idle, 12, -8,
-        left_arm_delta=(-3, -10),
-        right_arm_delta=(3, 10),
-        left_boot_delta=(-4, 8),
-        right_boot_delta=(4, -10),
+        idle, 12, -12,
+        left_arm_delta=(-6, -14),
+        right_arm_delta=(-6, 14),
+        left_boot_delta=(-6, 14),
+        right_boot_delta=(6, -18),
     )
     transition_b = make_step(
-        idle, -6, -4,
-        left_arm_delta=(-1, 5),
-        right_arm_delta=(1, -5),
-        left_boot_delta=(-2, -5),
-        right_boot_delta=(2, 4),
+        idle, -6, -6,
+        left_arm_delta=(3, 7),
+        right_arm_delta=(3, -7),
+        left_boot_delta=(-3, -9),
+        right_boot_delta=(3, 7),
     )
     full_b = make_step(
-        idle, -12, -8,
-        left_arm_delta=(-3, 10),
-        right_arm_delta=(3, -10),
-        left_boot_delta=(-4, -10),
-        right_boot_delta=(4, 8),
+        idle, -12, -12,
+        left_arm_delta=(6, 14),
+        right_arm_delta=(6, -14),
+        left_boot_delta=(-6, -18),
+        right_boot_delta=(6, 14),
     )
 
     frames = [
