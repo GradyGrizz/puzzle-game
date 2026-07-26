@@ -699,6 +699,7 @@ ASSETS: {
   player_idle_right: 'art/player_idle/player_idle_right.png',
   player_walk_right_review: 'art/animations/player_walk_right/sprite_sheet_review.png',
   player_walk_up_review: 'art/animations/player_walk_up/sprite_sheet_review.png',
+  player_walk_down_review: 'art/animations/player_walk_down/sprite_sheet_review.png',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
@@ -796,13 +797,16 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   // mirrored. Every cell has the same canvas and baseline as the idle sprites,
   // preventing frame-to-frame resizing or foot-line jitter in gameplay.
   const isUpWalk = dir === 'up';
-  const walkSheet = this.img && (isUpWalk
-    ? this.img.player_walk_up_review
-    : this.img.player_walk_right_review);
+  const isDownWalk = dir === 'down';
+  const walkSheet = this.img && (
+    isUpWalk ? this.img.player_walk_up_review :
+    isDownWalk ? this.img.player_walk_down_review :
+    this.img.player_walk_right_review
+  );
   if (!pushing && !idle &&
-      (dir === 'right' || dir === 'left' || isUpWalk) &&
+      (dir === 'right' || dir === 'left' || isUpWalk || isDownWalk) &&
       walkSheet && this._ready(walkSheet)) {
-    const frameCount = isUpWalk ? 4 : 8;
+    const frameCount = isUpWalk ? 4 : isDownWalk ? 9 : 8;
     const sw = Math.floor(walkSheet.naturalWidth / frameCount);
     const sh = walkSheet.naturalHeight;
     const sx = (frame % frameCount) * sw;
@@ -812,7 +816,7 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     // A tiny whole-body drop on each full-stride contact keeps the walk from
     // reading as a rigid torso with independently moving limbs. Frame 1 stays
     // pixel-aligned with idle, and the feet retain their existing artwork.
-    const bob = isUpWalk ? 0 :
+    const bob = (isUpWalk || isDownWalk) ? 0 :
       [0, 0, 1, 0, 0, 0, 1, 0][frame % frameCount] *
       Math.max(1, Math.round(tile / 30));
     const dy = py + tile - dh + bob;
@@ -836,7 +840,7 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     return;
   }
 
-  // Idle and downward movement continue using the approved directional poses.
+  // Idle poses continue using the approved directional sprites.
   const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);

@@ -928,7 +928,10 @@ const ScreenGame = {
       // walk strip at 12 fps while tying slower analog movement to travel.
       // walkPhase resets to zero when movement begins, avoiding a random-frame
       // pop between the idle pose and the first step.
-      else this.pframe = this.pmoving ? Math.floor(this.walkPhase * 5) % 8 : 0;
+      else {
+        const walkFrames = this.pdir === 'up' ? 4 : this.pdir === 'down' ? 9 : 8;
+        this.pframe = this.pmoving ? Math.floor(this.walkPhase * 5) % walkFrames : 0;
+      }
       if (this.gameMode === 'challenge' && this.movesLeft() === 0) { this._runOver(); return; }
     }
 

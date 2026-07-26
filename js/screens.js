@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/25/2026 5:55pm (mst)';
+const BUILD_STAMP = '7/25/2026 6:25pm (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -838,10 +838,13 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
   if (id === 'hero') {
     const isHorizontalWalk = anim.dir === 'right' || anim.dir === 'left';
     const isUpWalk = anim.dir === 'up';
-    const walkFrameCount = isUpWalk ? 4 : 8;
+    const isDownWalk = anim.dir === 'down';
+    const walkFrameCount = isUpWalk ? 4 : isDownWalk ? 9 : 8;
     const frame = Math.floor(t * 12) % walkFrameCount;
-    const walkSheet = isUpWalk ? Art.img.player_walk_up_review : Art.img.player_walk_right_review;
-    if (anim.kind === 'walk' && (isHorizontalWalk || isUpWalk) &&
+    const walkSheet = isUpWalk ? Art.img.player_walk_up_review :
+      isDownWalk ? Art.img.player_walk_down_review :
+      Art.img.player_walk_right_review;
+    if (anim.kind === 'walk' && (isHorizontalWalk || isUpWalk || isDownWalk) &&
         Art._ready(walkSheet)) {
       const sw = Math.floor(walkSheet.naturalWidth / walkFrameCount);
       const sh = walkSheet.naturalHeight;
