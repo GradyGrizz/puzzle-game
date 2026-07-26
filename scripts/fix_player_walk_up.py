@@ -2,7 +2,7 @@ from pathlib import Path
 from shutil import copy2
 from collections import deque
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +58,122 @@ def replace_stationary_head(frame, idle, dx, dy):
     return result
 
 
+def arm_mask(image, box):
+    """Select arm/hand colors plus their dark outline, excluding green cape."""
+    x0, y0, x1, y1 = box
+    crop = image.crop(box)
+    seed = Image.new("L", crop.size)
+    seed_pixels = seed.load()
+    source = crop.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue, alpha = source[x, y]
+            if (
+                alpha >= 32
+                and red >= 45
+                and red > green * 1.10
+                and red > blue * 1.14
+            ):
+                seed_pixels[x, y] = 255
+
+    nearby = seed.filter(ImageFilter.MaxFilter(21))
+    near_pixels = nearby.load()
+    mask = Image.new("L", crop.size)
+    mask_pixels = mask.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue, alpha = source[x, y]
+            is_arm_or_outline = (
+                near_pixels[x, y]
+                and alpha > 0
+                and not (green > red * 1.18 and green > blue * 1.12)
+            )
+            if seed_pixels[x, y] or is_arm_or_outline:
+                mask_pixels[x, y] = alpha
+    return mask
+
+
+def replace_generated_arms(frame, idle, cape_dx, left_dy, right_dy):
+    """Use the clean idle arms, shifted vertically, instead of AI-smeared arms."""
+    result = frame.copy()
+    boxes = [(25, 395, 135, 640), (380, 395, 511, 640)]
+    shifts = [(cape_dx, left_dy), (cape_dx, right_dy)]
+
+    for box, (dx, dy) in zip(boxes, shifts):
+        old_mask = arm_mask(result, box)
+        old_pixels = old_mask.load()
+        result_pixels = result.load()
+        x0, y0, x1, y1 = box
+        for local_y in range(y1 - y0):
+            for local_x in range(x1 - x0):
+                if old_pixels[local_x, local_y]:
+                    result_pixels[x0 + local_x, y0 + local_y] = (0, 0, 0, 0)
+
+        clean_arm = idle.crop(box)
+        clean_mask = arm_mask(idle, box)
+        clean_arm.putalpha(clean_mask)
+
+        # Keep the shoulder attached to the cape while the forearm and hand
+        # swing. This avoids narrow transparent seams at the joint.
+        shoulder_mask = clean_mask.copy()
+        shoulder_pixels = shoulder_mask.load()
+        for local_y in range(shoulder_mask.height):
+            for local_x in range(shoulder_mask.width):
+                if local_y > 105:
+                    shoulder_pixels[local_x, local_y] = 0
+        shoulder = idle.crop(box)
+        shoulder.putalpha(shoulder_mask)
+        result.alpha_composite(shoulder, (x0 + cape_dx, y0 - 4))
+        result.alpha_composite(clean_arm, (x0 + dx, y0 + dy))
+
+    return result
+
+
+def close_tiny_arm_seams(image):
+    """Close only 1–3 px background leaks around animated arm joints."""
+    result = image.copy()
+    boxes = [(20, 390, 145, 650), (370, 390, 511, 650)]
+    for box in boxes:
+        x0, y0, x1, y1 = box
+        crop = result.crop(box)
+        alpha = crop.getchannel("A").point(lambda value: 255 if value >= 32 else 0)
+        closed = alpha.filter(ImageFilter.MaxFilter(7)).filter(
+            ImageFilter.MinFilter(7)
+        )
+        original_pixels = crop.load()
+        alpha_pixels = alpha.load()
+        closed_pixels = closed.load()
+        additions = []
+        for y in range(crop.height):
+            for x in range(crop.width):
+                if not alpha_pixels[x, y] and closed_pixels[x, y]:
+                    additions.append((x, y))
+
+        for x, y in additions:
+            nearest = None
+            for radius in range(1, 7):
+                candidates = []
+                for oy in range(-radius, radius + 1):
+                    for ox in range(-radius, radius + 1):
+                        nx, ny = x + ox, y + oy
+                        if (
+                            0 <= nx < crop.width
+                            and 0 <= ny < crop.height
+                            and alpha_pixels[nx, ny]
+                        ):
+                            candidates.append(original_pixels[nx, ny])
+                if candidates:
+                    nearest = min(
+                        candidates,
+                        key=lambda pixel: abs(pixel[0] - pixel[1]),
+                    )
+                    break
+            if nearest:
+                original_pixels[x, y] = nearest[:3] + (255,)
+        result.alpha_composite(crop, (x0, y0))
+    return result
+
+
 def repair_isolated_alpha_defects(image):
     """Fill only enclosed one-pixel alpha defects; preserve real outer edges."""
     result = image.copy()
@@ -93,6 +209,21 @@ def repair_isolated_alpha_defects(image):
         if not repairs:
             break
 
+    return result
+
+
+def harden_pixel_art_alpha(image):
+    """Remove blurry fractional-alpha pixels while preserving the silhouette."""
+    result = image.copy()
+    pixels = result.load()
+    for y in range(result.height):
+        for x in range(result.width):
+            red, green, blue, alpha = pixels[x, y]
+            pixels[x, y] = (
+                (red, green, blue, 255)
+                if alpha >= 32
+                else (0, 0, 0, 0)
+            )
     return result
 
 
@@ -190,23 +321,43 @@ def main():
     idle = Image.open(IDLE).convert("RGBA")
     frames = [
         idle.copy(),
-        replace_stationary_head(
-            Image.open(BACKUP / "frame_02.png").convert("RGBA"),
-            idle,
-            5,
-            -4,
+        close_tiny_arm_seams(
+            replace_generated_arms(
+                replace_stationary_head(
+                    Image.open(BACKUP / "frame_02.png").convert("RGBA"),
+                    idle,
+                    5,
+                    -4,
+                ),
+                idle,
+                5,
+                -14,
+                14,
+            ),
         ),
         idle.copy(),
-        replace_stationary_head(
-            Image.open(BACKUP / "frame_04.png").convert("RGBA"),
-            idle,
-            -5,
-            -4,
+        close_tiny_arm_seams(
+            replace_generated_arms(
+                replace_stationary_head(
+                    Image.open(BACKUP / "frame_04.png").convert("RGBA"),
+                    idle,
+                    -5,
+                    -4,
+                ),
+                idle,
+                -5,
+                14,
+                -14,
+            ),
         ),
     ]
     frames = [
-        repair_isolated_alpha_defects(
-            repair_enclosed_transparent_specks(frame)
+        harden_pixel_art_alpha(
+            repair_isolated_alpha_defects(
+                repair_enclosed_transparent_specks(
+                    harden_pixel_art_alpha(frame)
+                )
+            )
         )
         for frame in frames
     ]
