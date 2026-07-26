@@ -795,10 +795,14 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   // The approved right-facing walk strip is also the left-facing cycle when
   // mirrored. Every cell has the same canvas and baseline as the idle sprites,
   // preventing frame-to-frame resizing or foot-line jitter in gameplay.
-  const walkSheet = this.img && this.img.player_walk_right_review;
-  if (!pushing && !idle && (dir === 'right' || dir === 'left') &&
+  const isUpWalk = dir === 'up';
+  const walkSheet = this.img && (isUpWalk
+    ? this.img.player_walk_up_review
+    : this.img.player_walk_right_review);
+  if (!pushing && !idle &&
+      (dir === 'right' || dir === 'left' || isUpWalk) &&
       walkSheet && this._ready(walkSheet)) {
-    const frameCount = 8;
+    const frameCount = isUpWalk ? 4 : 8;
     const sw = Math.floor(walkSheet.naturalWidth / frameCount);
     const sh = walkSheet.naturalHeight;
     const sx = (frame % frameCount) * sw;
@@ -808,7 +812,8 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     // A tiny whole-body drop on each full-stride contact keeps the walk from
     // reading as a rigid torso with independently moving limbs. Frame 1 stays
     // pixel-aligned with idle, and the feet retain their existing artwork.
-    const bob = [0, 0, 1, 0, 0, 0, 1, 0][frame % frameCount] *
+    const bob = isUpWalk ? 0 :
+      [0, 0, 1, 0, 0, 0, 1, 0][frame % frameCount] *
       Math.max(1, Math.round(tile / 30));
     const dy = py + tile - dh + bob;
     ctx.save();
@@ -831,7 +836,7 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     return;
   }
 
-  // Idle and vertical movement continue using the approved directional poses.
+  // Idle and downward movement continue using the approved directional poses.
   const idleSprite = this.img && this.img['player_idle_' + dir];
   if (idleSprite && this._ready(idleSprite)) {
     const dh = Math.round(tile * 1.05);

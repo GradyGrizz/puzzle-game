@@ -30,13 +30,15 @@ const upHeight = upSheet.readUInt32BE(20);
 expect('approved gameplay walk sheet has eight equal 522px cells',
   width === 8 * 522 && height === 763);
 expect('horizontal gameplay movement selects the approved walk sheet',
-  art.includes("(dir === 'right' || dir === 'left')") &&
+  art.includes("dir === 'right' || dir === 'left' || isUpWalk") &&
   art.includes('player_walk_right_review'));
 expect('left gameplay movement mirrors the approved right cycle',
   art.includes("if (dir === 'left')") && art.includes('ctx.scale(-1, 1)'));
-expect('sprite lab uses the four-frame walk-up sheet',
+expect('sprite lab and gameplay use the four-frame walk-up sheet',
   upWidth === 4 * 511 && upHeight === 767 &&
   art.includes('player_walk_up_review') &&
+  art.includes("const isUpWalk = dir === 'up'") &&
+  art.includes('const frameCount = isUpWalk ? 4 : 8') &&
   screens.includes("const isUpWalk = anim.dir === 'up'"));
 expect('gameplay advances the walk cycle at twelve frames per second',
   game.includes('Math.floor(this.walkPhase * 5) % 8'));
@@ -48,7 +50,7 @@ expect('a new walk begins on the neutral first frame',
 expect('full-stride frames add a symmetrical whole-body bob',
   art.includes('[0, 0, 1, 0, 0, 0, 1, 0]') &&
   sourceHasSpriteLabBob());
-expect('idle and vertical movement retain directional idle sprites',
+expect('idle and downward movement retain directional idle sprites',
   art.includes("this.img['player_idle_' + dir]"));
 
 function sourceHasSpriteLabBob() {

@@ -1,0 +1,241 @@
+from pathlib import Path
+from shutil import copy2
+from collections import deque
+
+from PIL import Image
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DRAFT = ROOT / "art" / "animation_drafts" / "player_walk_up_8frame"
+LIVE = ROOT / "art" / "animations" / "player_walk_up"
+BACKUP = (
+    ROOT
+    / "art"
+    / "animation_backups"
+    / "player_walk_up"
+    / "pre_head_sync_2026-07-25"
+)
+IDLE = ROOT / "art" / "player_idle" / "player_idle_up.png"
+FRAME_NAMES = [f"frame_{number:02}.png" for number in range(1, 5)]
+
+
+def backup_current_files():
+    BACKUP.mkdir(parents=True, exist_ok=True)
+    for name in FRAME_NAMES:
+        source = DRAFT / name
+        destination = BACKUP / name
+        if source.exists() and not destination.exists():
+            copy2(source, destination)
+    live_sheet = LIVE / "sprite_sheet_review.png"
+    backup_sheet = BACKUP / "sprite_sheet_review.png"
+    if live_sheet.exists() and not backup_sheet.exists():
+        copy2(live_sheet, backup_sheet)
+
+
+def shifted_head(base, dx, dy):
+    """Return the idle head moved with the cape without resampling pixels."""
+    width, height = base.size
+    head_bottom = 380
+    head = base.crop((0, 0, width, head_bottom))
+    layer = Image.new("RGBA", base.size)
+    layer.alpha_composite(head, (dx, dy))
+    return layer
+
+
+def replace_stationary_head(frame, idle, dx, dy):
+    result = frame.copy()
+    idle_pixels = idle.load()
+    result_pixels = result.load()
+
+    # The generated step frames retained the idle head exactly. Remove only
+    # that stationary head, leaving the cape, arms, hands, and legs untouched.
+    for y in range(380):
+        for x in range(idle.width):
+            if idle_pixels[x, y][3]:
+                result_pixels[x, y] = (0, 0, 0, 0)
+
+    result.alpha_composite(shifted_head(idle, dx, dy))
+    return result
+
+
+def repair_isolated_alpha_defects(image):
+    """Fill only enclosed one-pixel alpha defects; preserve real outer edges."""
+    result = image.copy()
+    width, height = result.size
+
+    for _ in range(12):
+        source = result.copy()
+        src = source.load()
+        dst = result.load()
+        repairs = 0
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                pixel = src[x, y]
+                neighbors = [
+                    src[x + ox, y + oy]
+                    for oy in (-1, 0, 1)
+                    for ox in (-1, 0, 1)
+                    if ox or oy
+                ]
+                solid = [neighbor for neighbor in neighbors if neighbor[3] >= 240]
+
+                # A transparent pinhole or weak-alpha speck fully enclosed by
+                # solid artwork is an artifact, not a legitimate silhouette.
+                if pixel[3] < 240 and len(solid) >= 7:
+                    channels = [
+                        sorted(neighbor[channel] for neighbor in solid)
+                        for channel in range(3)
+                    ]
+                    dst[x, y] = tuple(
+                        channel[len(channel) // 2] for channel in channels
+                    ) + (255,)
+                    repairs += 1
+        if not repairs:
+            break
+
+    return result
+
+
+def repair_enclosed_transparent_specks(image):
+    """Fill tiny transparent islands that do not connect to the background."""
+    result = image.copy()
+    pixels = result.load()
+    width, height = result.size
+    transparent = {
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if pixels[x, y][3] < 16
+    }
+    edge = deque(
+        [(x, y) for x in range(width) for y in (0, height - 1)
+         if (x, y) in transparent]
+        + [(x, y) for y in range(height) for x in (0, width - 1)
+           if (x, y) in transparent]
+    )
+    outside = set(edge)
+    while edge:
+        x, y = edge.popleft()
+        for neighbor in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if neighbor in transparent and neighbor not in outside:
+                outside.add(neighbor)
+                edge.append(neighbor)
+
+    enclosed = transparent - outside
+    while enclosed:
+        start = enclosed.pop()
+        component = {start}
+        queue = deque([start])
+        while queue:
+            x, y = queue.popleft()
+            for neighbor in (
+                (x - 1, y),
+                (x + 1, y),
+                (x, y - 1),
+                (x, y + 1),
+            ):
+                if neighbor in enclosed:
+                    enclosed.remove(neighbor)
+                    component.add(neighbor)
+                    queue.append(neighbor)
+
+        if len(component) > 12:
+            continue
+        boundary = []
+        for x, y in component:
+            for ox, oy in (
+                (-1, -1), (0, -1), (1, -1),
+                (-1, 0),           (1, 0),
+                (-1, 1),  (0, 1),  (1, 1),
+            ):
+                nx, ny = x + ox, y + oy
+                if (
+                    0 <= nx < width
+                    and 0 <= ny < height
+                    and pixels[nx, ny][3] >= 200
+                ):
+                    boundary.append(pixels[nx, ny])
+        if not boundary:
+            continue
+        medians = []
+        for channel in range(3):
+            values = sorted(pixel[channel] for pixel in boundary)
+            medians.append(values[len(values) // 2])
+        for x, y in component:
+            pixels[x, y] = tuple(medians) + (255,)
+
+    return result
+
+
+def count_isolated_alpha_defects(image):
+    pixels = image.load()
+    count = 0
+    for y in range(1, image.height - 1):
+        for x in range(1, image.width - 1):
+            if pixels[x, y][3] >= 240:
+                continue
+            solid_neighbors = 0
+            for oy in (-1, 0, 1):
+                for ox in (-1, 0, 1):
+                    if (ox or oy) and pixels[x + ox, y + oy][3] >= 240:
+                        solid_neighbors += 1
+            if solid_neighbors >= 7:
+                count += 1
+    return count
+
+
+def main():
+    backup_current_files()
+
+    idle = Image.open(IDLE).convert("RGBA")
+    frames = [
+        idle.copy(),
+        replace_stationary_head(
+            Image.open(BACKUP / "frame_02.png").convert("RGBA"),
+            idle,
+            5,
+            -4,
+        ),
+        idle.copy(),
+        replace_stationary_head(
+            Image.open(BACKUP / "frame_04.png").convert("RGBA"),
+            idle,
+            -5,
+            -4,
+        ),
+    ]
+    frames = [
+        repair_isolated_alpha_defects(
+            repair_enclosed_transparent_specks(frame)
+        )
+        for frame in frames
+    ]
+
+    if any(frame.size != idle.size for frame in frames):
+        raise RuntimeError("Walk-up frames no longer share the idle dimensions")
+    if frames[0].tobytes() != frames[2].tobytes():
+        raise RuntimeError("Neutral frames must remain identical")
+
+    for index, frame in enumerate(frames, start=1):
+        defects = count_isolated_alpha_defects(frame)
+        if defects:
+            raise RuntimeError(
+                f"frame {index} still has {defects} enclosed alpha defects"
+            )
+        frame.save(DRAFT / f"frame_{index:02}.png", optimize=True)
+
+    sheet = Image.new("RGBA", (idle.width * len(frames), idle.height))
+    for index, frame in enumerate(frames):
+        sheet.alpha_composite(frame, (index * idle.width, 0))
+
+    LIVE.mkdir(parents=True, exist_ok=True)
+    sheet.save(LIVE / "sprite_sheet_review.png", optimize=True)
+    sheet.save(DRAFT / "sprite_sheet_progress.png", optimize=True)
+
+    print("Walk-up frames repaired and sheet rebuilt.")
+    print("Head offsets: frame 2 = (+5, -4), frame 4 = (-5, -4).")
+    print("Isolated transparent/weak-alpha defects: 0 in all frames.")
+
+
+if __name__ == "__main__":
+    main()
