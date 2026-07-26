@@ -58,6 +58,60 @@ def replace_stationary_head(frame, idle, dx, dy):
     return result
 
 
+def cape_mask(image, box):
+    """Select the green torso/cape plus its dark pixel outline."""
+    crop = image.crop(box)
+    seed = Image.new("L", crop.size)
+    seed_pixels = seed.load()
+    source = crop.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue, alpha = source[x, y]
+            if (
+                alpha >= 32
+                and green >= 38
+                and green > red * 1.12
+                and green > blue * 1.06
+            ):
+                seed_pixels[x, y] = 255
+
+    nearby = seed.filter(ImageFilter.MaxFilter(25))
+    near_pixels = nearby.load()
+    mask = Image.new("L", crop.size)
+    mask_pixels = mask.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue, alpha = source[x, y]
+            is_cape_outline = (
+                near_pixels[x, y]
+                and alpha > 0
+                and max(red, green, blue) < 90
+                and not (red > green * 1.16 and red > blue * 1.14)
+            )
+            if seed_pixels[x, y] or is_cape_outline:
+                mask_pixels[x, y] = alpha
+    return mask
+
+
+def replace_cape(frame, idle, dx, dy):
+    """Move the clean torso/cape as one rigid shape without resampling."""
+    result = frame.copy()
+    box = (35, 360, 480, 670)
+    x0, y0, x1, y1 = box
+    old_mask = cape_mask(result, box)
+    old_pixels = old_mask.load()
+    result_pixels = result.load()
+    for local_y in range(y1 - y0):
+        for local_x in range(x1 - x0):
+            if old_pixels[local_x, local_y]:
+                result_pixels[x0 + local_x, y0 + local_y] = (0, 0, 0, 0)
+
+    clean_cape = idle.crop(box)
+    clean_cape.putalpha(cape_mask(idle, box))
+    result.alpha_composite(clean_cape, (x0 + dx, y0 + dy))
+    return result
+
+
 def arm_mask(image, box):
     """Select arm/hand colors plus their dark outline, excluding green cape."""
     x0, y0, x1, y1 = box
@@ -324,13 +378,18 @@ def main():
         close_tiny_arm_seams(
             replace_generated_arms(
                 replace_stationary_head(
-                    Image.open(BACKUP / "frame_02.png").convert("RGBA"),
+                    replace_cape(
+                        Image.open(BACKUP / "frame_02.png").convert("RGBA"),
+                        idle,
+                        14,
+                        -6,
+                    ),
                     idle,
-                    5,
+                    14,
                     -4,
                 ),
                 idle,
-                5,
+                14,
                 -14,
                 14,
             ),
@@ -339,13 +398,18 @@ def main():
         close_tiny_arm_seams(
             replace_generated_arms(
                 replace_stationary_head(
-                    Image.open(BACKUP / "frame_04.png").convert("RGBA"),
+                    replace_cape(
+                        Image.open(BACKUP / "frame_04.png").convert("RGBA"),
+                        idle,
+                        -14,
+                        -6,
+                    ),
                     idle,
-                    -5,
+                    -14,
                     -4,
                 ),
                 idle,
-                -5,
+                -14,
                 14,
                 -14,
             ),
@@ -384,7 +448,7 @@ def main():
     sheet.save(DRAFT / "sprite_sheet_progress.png", optimize=True)
 
     print("Walk-up frames repaired and sheet rebuilt.")
-    print("Head offsets: frame 2 = (+5, -4), frame 4 = (-5, -4).")
+    print("Body offsets: frame 2 = (+14, -6), frame 4 = (-14, -6).")
     print("Isolated transparent/weak-alpha defects: 0 in all frames.")
 
 
