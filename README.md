@@ -63,6 +63,11 @@ node tests/levels.test.js   # solver-verifies all 31 story levels + mechanics
 Browser E2E smoke tests (Playwright) live outside the repo in dev
 scratchpads; they walk every screen and flow.
 
+## AI prompt library
+
+Reusable handoff prompts for sprite animation and future AI-to-AI workflows
+are stored in the [DELVE AI Prompt Library](prompts/README.md).
+
 ## Shipping to iOS
 
 See [TESTFLIGHT.md](TESTFLIGHT.md) for the Capacitor packaging guide and
