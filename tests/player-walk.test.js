@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 let failed = 0;
 function expect(name, ok) {
@@ -31,6 +32,14 @@ const upWidth = upSheet.readUInt32BE(16);
 const upHeight = upSheet.readUInt32BE(20);
 const downWidth = downSheet.readUInt32BE(16);
 const downHeight = downSheet.readUInt32BE(20);
+const sha256 = data => crypto.createHash('sha256').update(data).digest('hex');
+
+expect('approved walk sheets remain byte-for-byte locked',
+  sha256(sheet) === 'd2ed36cdb5eda10f087f92c3c54f53c50ad32cd83befc68f218995b413540ac2' &&
+  sha256(upSheet) === '9906ef3e21e1a17128fa974109704426688820e51f8f10dabce748ed3d8da6e2' &&
+  sha256(downSheet) === '749aa56360edf3820567f5616aa2932e24684c67db89c0b8fb271e6539d69a90');
+expect('approved player art is cache-versioned as one matching set',
+  (art.match(/approved-7e82db7/g) || []).length >= 7);
 
 expect('approved gameplay walk sheet has eight equal 522px cells',
   width === 8 * 522 && height === 763);
