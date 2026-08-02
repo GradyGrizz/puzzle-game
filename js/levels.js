@@ -196,46 +196,113 @@ const DUNGEONS = [
   },
 ];
 
-// 30x15 isolated development arena. It is intentionally not part of
-// DUNGEONS, so story unlocks, completion records and rewards never see it.
-function buildTestMap() {
-  const w = 30, h = 15;
-  const g = Array.from({ length: h }, (_, r) =>
-    Array.from({ length: w }, (_, c) => (r === 0 || r === h - 1 || c === 0 || c === w - 1) ? '#' : '.'));
-  const put = (r, c, ch) => { g[r][c] = ch; };
-  for (let r = 1; r < h - 1; r++) {
-    if (r !== 4 && r !== 10) { put(r, 10, '#'); put(r, 20, '#'); }
-  }
-  put(2, 2, '@'); put(2, 4, 'o'); put(2, 6, 'k'); put(3, 3, 'b');
-  put(3, 6, 's'); put(5, 3, 'h'); put(5, 6, 's'); put(7, 3, 'b');
-  put(7, 5, 'p'); put(9, 3, 'c'); put(11, 5, 'd'); put(12, 7, 'x');
-  for (let c = 12; c <= 18; c += 2) put(2, c, 'u');
-  for (let c = 12; c <= 18; c += 2) put(5, c, 'f');
-  for (let c = 12; c <= 18; c += 2) put(8, c, 'p');
-  put(11, 12, 'C'); put(11, 15, 'o'); put(11, 18, 'k');
-  put(0, 13, 'T'); put(0, 17, 'T');
-  for (let c = 22; c <= 27; c++) put(7, c, '#');
-  put(7, 24, '.'); put(7, 27, '.');
-  for (let r = 2; r <= 5; r++) put(r, 25, r === 4 ? '.' : '#');
-  return g.map(row => row.join(''));
-}
-
+// Isolated five-room showcase dungeon. It uses the normal room/door system,
+// but remains outside DUNGEONS so it can never alter campaign progression.
 const TEST_DUNGEON = {
-  id: 'test-ground', name: 'TEST DUNGEON', map: buildTestMap(),
-  chest: { item: 'sword' },
-  zones: [
-    { c: 2, r: 1, text: 'PUZZLES' },
-    { c: 12, r: 1, text: 'HAZARDS + RELICS' },
-    { c: 22, r: 1, text: 'COMBAT' },
-    { c: 22, r: 9, text: 'DART LANE' },
-  ],
-  darkZones: [{ c: 11, r: 9, w: 9, h: 4 }],
-  enemies: [
-    { id: 'skeleton-a', type: 'skeleton', r: 3, c: 22 },
-    { id: 'skeleton-b', type: 'skeleton', r: 5, c: 27 },
-    { id: 'dart-a', type: 'dart', r: 10, c: 23 },
-    { id: 'dart-b', type: 'dart', r: 12, c: 27 },
-  ],
+  id: 'test-ground', name: 'TEST DUNGEON',
+  start: { room: 'hub', r: 7, c: 6 },
+  rooms: {
+    // The visual centerpiece: a symmetrical relic dais, four braziers,
+    // stone columns and four framed exits arranged around a cross-shaped nave.
+    hub: R(0, 0, [
+      '##T#######T##',
+      '#.....o.....#',
+      '#.#.......#.#',
+      '#...f...f...#',
+      '#..c..#..c..#',
+      '#o.........o#',
+      '#..c.....c..#',
+      '#...f.@.f...#',
+      '#.#.......#.#',
+      '#.....o.....#',
+      '##T#######T##',
+    ], { n: 'open', s: 'open', e: 'open', w: 'open' }, {
+      decorations: [{ type: 'relic', item: 'sunstone', r: 4, c: 6 }],
+    }),
+
+    // Two blocks must cross the ruined western floor to reach both seals.
+    // The eastern wall and key-door form a short antechamber before the vault.
+    puzzle: R(-1, 0, [
+      '##T#######T##',
+      '#..u...#....#',
+      '#.c.c..#.k..#',
+      '#......#....#',
+      '#.s.b..#.o..#',
+      '#..p...d....#',
+      '#.s.b..#.c..#',
+      '#......#....#',
+      '#.C..h.#.u..#',
+      '#..c...#....#',
+      '##T#######T##',
+    ], { e: 'shutter' }, { chest: { item: 'map' } }),
+
+    // A ruined arena: broken floor, collapsed columns and a dark prison-like
+    // perimeter. Every currently implemented enemy type appears here.
+    combat: R(1, 0, [
+      '##T#######T##',
+      '#p..c...c..p#',
+      '#.##.....##.#',
+      '#...c.p.c...#',
+      '#.#.......#.#',
+      '#.....c.....#',
+      '#.#.......#.#',
+      '#...c.p.c...#',
+      '#.##.....##.#',
+      '#p..c...c..p#',
+      '##T#######T##',
+    ], { w: 'open' }, {
+      dark: true,
+      enemies: [
+        { id: 'arena-skeleton-a', type: 'skeleton', r: 3, c: 4 },
+        { id: 'arena-skeleton-b', type: 'skeleton', r: 7, c: 8 },
+        { id: 'arena-skeleton-c', type: 'skeleton', r: 5, c: 9 },
+        { id: 'arena-dart-a', type: 'dart', r: 2, c: 10 },
+        { id: 'arena-dart-b', type: 'dart', r: 8, c: 2 },
+      ],
+    }),
+
+    // The narrow hazard lanes telegraph alternating flame, chasm and dart
+    // threats. A key opens the final barred reliquary at the south end.
+    trap: R(0, 1, [
+      '##T#######T##',
+      '#.....c.....#',
+      '#.f.p...p.f.#',
+      '#...c.k.c...#',
+      '#.p.f...f.p.#',
+      '#s..c...c..s#',
+      '#.p.f...f.p.#',
+      '######d######',
+      '#..c..#..c..#',
+      '#o...f.f...o#',
+      '##T#######T##',
+    ], { n: 'open' }, {
+      decorations: [{ type: 'relic', item: 'shield', r: 8, c: 6 }],
+      enemies: [
+        { id: 'trap-dart-a', type: 'dart', r: 3, c: 1 },
+        { id: 'trap-dart-b', type: 'dart', r: 3, c: 11 },
+        { id: 'trap-dart-c', type: 'dart', r: 6, c: 6 },
+      ],
+    }),
+
+    // Coins lead through a ceremonial aisle to the weapon chest. Heavy stone
+    // figures, flames and the existing gold palette make the reward readable.
+    treasure: R(0, -1, [
+      '##T#######T##',
+      '#o.o.o.o.o.o#',
+      '#h..f...f..h#',
+      '#.o...C...o.#',
+      '#...c...c...#',
+      '#h.o..#..o.h#',
+      '#...c...c...#',
+      '#h..f...f..h#',
+      '#o.o.o.o.o.o#',
+      '#.....o.....#',
+      '##T#######T##',
+    ], { s: 'open' }, {
+      chest: { item: 'sword' },
+      decorations: [{ type: 'relic', item: 'sunstone', r: 5, c: 6 }],
+    }),
+  },
 };
 // ── helpers ───────────────────────────────────────────────────
 function allDungeons() { return DUNGEONS; }

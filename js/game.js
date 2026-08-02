@@ -42,10 +42,24 @@ const ScreenGame = {
       }
       return;
     } else if (this.gameMode === 'test') {
-      this.lv = TEST_DUNGEON;
+      // The test dungeon uses the same proven room/door machinery as story,
+      // while remaining completely isolated from saves and progression.
+      this.dungeon = TEST_DUNGEON;
       this.levelId = TEST_DUNGEON.name;
       this.firstTime = false;
+      this.mapFound = true;
       this.budget = 0;
+      this.rooms = {};
+      this.dkeys = 0;
+      this.unlocked = {};
+      this.solved = {};
+      this.visited = {};
+      this._introSeen = {};
+      this.introShown = false;
+      this.roomTrans = null;
+      this._initStoryFields();
+      this._loadRoom(this.dungeon.start.room, null, this.dungeon.start);
+      return;
     } else if (this.gameMode === 'challenge') {
       let g = App.pregen && App.pregen.depth === this.run.depth && App.pregen.seed === this.run.seed
         ? App.pregen.gen : genLevel(this.run.depth, this.run.seed);
@@ -139,7 +153,12 @@ const ScreenGame = {
       st.player.dir = { n: 'down', s: 'up', e: 'left', w: 'right' }[entrySide];
     }
     this.state = st;
-    this.lv = { map: room.map, chest: room.chest || null };
+    this.lv = {
+      map: room.map,
+      chest: room.chest || null,
+      darkZones: room.darkZones || null,
+      decorations: room.decorations || null,
+    };
     this.history = [];
     this.filled = {};
     this._recomputeFilled();
@@ -428,7 +447,7 @@ const ScreenGame = {
   attemptMove(dc, dr, fromRepeat) {
     if (this.mode !== 'play') return;
     // dungeon: stepping toward a room-edge door leaves the room
-    if (this.gameMode === 'story') {
+    if (this.dungeon) {
       const d = this._doorAhead(dc, dr);
       if (d) { if (!fromRepeat) this._tryDoor(d.side); return; }
     }
@@ -494,7 +513,7 @@ const ScreenGame = {
     this.state = a.newState;
     this.mode = 'play';
     const has = t => a.events.some(e => e.type === t);
-    if (this.gameMode === 'story') this.dkeys = this.state.keys;
+    if (this.dungeon) this.dkeys = this.state.keys;
     if (a.push && !has('blockFall')) { Snd.thud(); Platform.haptic(); }
     if (has('blockFall')) {
       const ev = a.events.find(e => e.type === 'blockFall');
@@ -677,7 +696,7 @@ const ScreenGame = {
     this.state = h.st; this.px = h.px; this.py = h.py; this.steps = h.steps;
     this.state.player.r = Math.floor(this.py); this.state.player.c = Math.floor(this.px);
     this._lastTile = this.state.player.r + ',' + this.state.player.c;
-    if (this.gameMode === 'story') { this.rooms[this.roomId] = this.state; this.dkeys = this.state.keys; }
+    if (this.dungeon) { this.rooms[this.roomId] = this.state; this.dkeys = this.state.keys; }
     this._recomputeFilled();
     Snd.undo();
   },
@@ -686,7 +705,7 @@ const ScreenGame = {
     this._pushHistory(cloneState(this.state));
     this.fallAnim = null; this.blockSlide = null; this.pushT = 0;
     this.state = parseLevel(this.lv);
-    if (this.gameMode === 'story') {
+    if (this.dungeon) {
       const room = this.dungeon.rooms[this.roomId];
       this.state.dark = !!room.dark;
       this.state.keys = this.dkeys;
@@ -697,7 +716,7 @@ const ScreenGame = {
     this._setPlayerCell(e.r, e.c);
     this.filled = {};
     this.exitGlow = 0;
-    const combatSpawns = this.gameMode === 'test' ? (this.lv.enemies || []) : (this.gameMode === 'story' ? (this.dungeon.rooms[this.roomId].enemies || []) : []);
+    const combatSpawns = this.dungeon ? (this.dungeon.rooms[this.roomId].enemies || []) : [];
     this._startCombat(combatSpawns, this.gameMode === 'test' ? 'test' : this.roomId, true);
     Snd.back();
   },
@@ -919,7 +938,7 @@ const ScreenGame = {
       }
       // latch this room as solved the first time every switch is covered, so its
       // shutter doors stay open even after the blocks are reset on re-entry
-      if (this.gameMode === 'story' && !this.solved[this.roomId] && Dungeon.roomSolved(this.state)) this.solved[this.roomId] = true;
+      if (this.dungeon && !this.solved[this.roomId] && Dungeon.roomSolved(this.state)) this.solved[this.roomId] = true;
       // a shove is slow and deliberate ("heavy"): step its frames on a calm,
       // time-based clock rather than the brisk distance-based walk cadence.
       const shoving = !!this.blockSlide || (this.pushGrace > 0 && this.pmoving && this.pushDir === this.pdir);
@@ -977,7 +996,7 @@ const ScreenGame = {
     const bx = sidePad + Math.floor((W - sidePad * 2 - T * st.w) / 2);
     const by = hudH + Math.floor((H - hudH - botH - T * st.h) / 2);
     this._board = { bx, by, T };
-    this._doors = this.gameMode === 'story' ? this._doorCells() : null;
+    this._doors = this.dungeon ? this._doorCells() : null;
 
     for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
       const x = bx + c * T, y = by + r * T, t = st.tiles[r][c];
@@ -1010,6 +1029,11 @@ const ScreenGame = {
       if (st.items[k] === 'coin') Art.coin(ctx, x, y, T, this.t * 4 + r + c);
       else if (st.items[k] === 'key') Art.key(ctx, x, y, T, this.t * 4 + r);
     }
+
+    // Test-dungeon display pieces are composed only from existing block and
+    // inventory art. Their authored cells are walls, so the pedestals remain
+    // solid without introducing a new collision or asset type.
+    if (this.gameMode === 'test') this._drawTestDecorations(ctx);
 
     if (st.chest && st.chest.r >= 0) {
       let phase = st.chest.opened ? 1 : 0;
@@ -1173,6 +1197,18 @@ const ScreenGame = {
     }
     for (const z of def.zones || []) {
       drawTextFit(ctx, z.text, b.bx + z.c * b.T, b.by + z.r * b.T + 2, Math.min(9 * b.T, 150), 1, PAL.goldHi, 'left', '#000');
+    }
+  },
+  _drawTestDecorations(ctx) {
+    const def = this.lv, b = this._board;
+    if (!def || !b || !def.decorations) return;
+    for (const d of def.decorations) {
+      if (d.type !== 'relic') continue;
+      const x = b.bx + d.c * b.T, y = b.by + d.r * b.T;
+      Art.blockRaw(ctx, x, y, b.T, 0.92);
+      const size = Math.max(12, Math.floor(b.T * 0.68));
+      const bob = Math.round(Math.sin(this.t * 2.2) * Math.max(1, b.T * 0.04));
+      Art.item(ctx, d.item, x + (b.T - size) / 2, y - size * 0.34 + bob, size);
     }
   },
   drawPause(ctx, W, H) {

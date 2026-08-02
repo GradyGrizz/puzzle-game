@@ -85,7 +85,7 @@ const FM = {
     const events = [];
     g.pushGrace = Math.max(0, (g.pushGrace || 0) - dt);   // keep the push pose steady between shoves
     if (g.swingT > 0) g.swingT = Math.max(0, g.swingT - dt);
-    if (g.gameMode === 'story') g._doors = g._doorCells(); else g._doors = null;
+    if (g.dungeon) g._doors = g._doorCells(); else g._doors = null;
 
     // movement vector: a dodge roll takes over; else the analog stick (variable
     // speed via its magnitude); else the d-pad / keyboard booleans (8-way).
@@ -264,7 +264,7 @@ const FM = {
     if (st.items[key] === 'coin') { delete st.items[key]; st.coinsGot++; events.push({ type: 'coin' }); }
     else if (st.items[key] === 'key') { delete st.items[key]; st.keys++; g.dkeys = st.keys; events.push({ type: 'key' }); }
     if (st.tiles[r][c] === TILE.EXIT && st.exitOpen && !st.won) { st.won = true; events.push({ type: 'win' }); }
-    if (g.gameMode === 'story' && g._doors) {
+    if (g.dungeon && g._doors) {
       const d = g._doors[key];
       if (d && d.open) events.push({ type: 'door', side: d.side });
     }

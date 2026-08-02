@@ -2,6 +2,7 @@
 const path = require('path');
 const { Combat } = require(path.join(__dirname, '..', 'js', 'combat.js'));
 const { TEST_DUNGEON } = require(path.join(__dirname, '..', 'js', 'levels.js'));
+const Engine = require(path.join(__dirname, '..', 'js', 'engine.js'));
 let failures = 0;
 function expect(name, cond) { if (cond) console.log('  OK  combat: ' + name); else { console.error('FAIL  combat: ' + name); failures++; } }
 const openWorld = { solid: () => false, lineClear: () => true };
@@ -62,11 +63,30 @@ const player = (rolling) => ({ x: 1.5, y: 1.5, dir: 'right', rolling: !!rolling 
   expect('defeated enemies stay defeated within a run', st.enemies.length === 0);
 }
 
-expect('test dungeon is exactly 30x15', TEST_DUNGEON.map.length === 15 && TEST_DUNGEON.map.every(r => r.length === 30));
-for (const ch of ['b', 'h', 's', 'p', 'c', 'f', 'u', 'o', 'k', 'C', 'd', 'x']) {
-  expect('test dungeon includes ' + ch, TEST_DUNGEON.map.some(row => row.includes(ch)));
+const testRooms = Object.values(TEST_DUNGEON.rooms);
+expect('test dungeon has five purpose-built rooms', testRooms.length === 5);
+expect('test dungeon uses a cross layout',
+  testRooms.some(r => r.gx === 0 && r.gy === 0) &&
+  testRooms.some(r => r.gx === 0 && r.gy === -1) &&
+  testRooms.some(r => r.gx === -1 && r.gy === 0) &&
+  testRooms.some(r => r.gx === 1 && r.gy === 0) &&
+  testRooms.some(r => r.gx === 0 && r.gy === 1));
+expect('all test rooms use consistent 13x11 presentation', testRooms.every(r => r.map.length === 11 && r.map.every(row => row.length === 13)));
+for (const ch of ['b', 'h', 's', 'p', 'c', 'f', 'u', 'o', 'k', 'C', 'd']) {
+  expect('test dungeon includes ' + ch, testRooms.some(room => room.map.some(row => row.includes(ch))));
 }
-expect('test dungeon contains both enemy types', TEST_DUNGEON.enemies.some(e => e.type === 'skeleton') && TEST_DUNGEON.enemies.some(e => e.type === 'dart'));
+const testEnemies = testRooms.flatMap(room => room.enemies || []);
+expect('test dungeon contains both enemy types', testEnemies.some(e => e.type === 'skeleton') && testEnemies.some(e => e.type === 'dart'));
+expect('test dungeon has no developer-room text labels', testRooms.every(room => !room.zones));
+expect('hub, trap and treasure rooms use existing relic displays',
+  ['hub', 'trap', 'treasure'].every(id => (TEST_DUNGEON.rooms[id].decorations || []).some(d => d.type === 'relic')));
+{
+  const room = TEST_DUNGEON.rooms.puzzle;
+  const st = Engine.parseLevel({ map: room.map, chest: room.chest });
+  st.player = { r: 5, c: 11, dir: 'left' };
+  const solved = Engine.solveGoal(st, { sword: true, shield: true, glove: true, lantern: true, boots: true }, Engine.switchesDone, 500000);
+  expect('gated puzzle room is solvable from its entrance', solved.solvable);
+}
 
 console.log(failures ? '\n' + failures + ' FAILURE(S)' : '\nALL COMBAT TESTS PASSED');
 process.exit(failures ? 1 : 0);
