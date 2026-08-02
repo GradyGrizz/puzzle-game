@@ -30,10 +30,12 @@ const SpriteLabReferenceAnimations = (() => {
       image: 'player_walk_right_review', count: 8,
       // Exact gameplay playback for the restored July 25 backup.
       sequence: [0, 1, 2, 3, 4, 5, 6, 7], fps: 12,
+      bob: [0, 0, 1, 0, 0, 0, 1, 0],
     },
     left: {
       image: 'player_walk_right_review', count: 8,
       sequence: [0, 1, 2, 3, 4, 5, 6, 7], fps: 12,
+      bob: [0, 0, 1, 0, 0, 0, 1, 0],
       mirror: true,
     },
   };
@@ -79,7 +81,8 @@ const SpriteLabReferenceAnimations = (() => {
     const dh = Math.round(tile * 1.05);
     const dw = Math.round(dh * sw / sh);
     const dx = Math.round(x - dw / 2);
-    const dy = Math.round(y - dh);
+    const bob = profile.bob ? profile.bob[frame] * Math.max(1, Math.round(tile / 30)) : 0;
+    const dy = Math.round(y - dh + bob);
     shadow(ctx, x, y, tile);
     ctx.imageSmoothingEnabled = false;
     if (profile.mirror) {

@@ -40,7 +40,7 @@ expect('approved walk sheets remain byte-for-byte locked',
   sha256(upSheet) === '9906ef3e21e1a17128fa974109704426688820e51f8f10dabce748ed3d8da6e2' &&
   sha256(downSheet) === '749aa56360edf3820567f5616aa2932e24684c67db89c0b8fb271e6539d69a90');
 expect('approved player art is cache-versioned as one matching set',
-  (art.match(/horizontal-backup-20260725/g) || []).length >= 5);
+  (art.match(/july25-final-bob/g) || []).length >= 5);
 
 expect('approved gameplay walk sheet has eight equal 522px cells',
   width === 8 * 522 && height === 763);
@@ -71,10 +71,10 @@ expect('normal movement uses the animation-matched 2.4 tile speed',
 expect('a new walk begins on the neutral first frame',
   freeMove.includes('const wasMoving = !!g.pmoving') &&
   freeMove.includes(': 0;'));
-expect('restored horizontal backup has no later whole-body bob overlay',
-  art.includes('const dy = py + tile - dh;') &&
-  !art.includes('[0, 0, 1, 0, 0, 0, 1, 0]') &&
-  !screens.includes('[0, 0, 1, 0, 0, 0, 1, 0]'));
+expect('July 25 contact-step bob is identical in gameplay and Sprite Lab',
+  art.includes('[0, 0, 1, 0, 0, 0, 1, 0]') &&
+  screens.includes('[0, 0, 1, 0, 0, 0, 1, 0]') &&
+  (spriteLabReference.match(/bob: \[0, 0, 1, 0, 0, 0, 1, 0\]/g) || []).length === 2);
 expect('idle movement retains directional idle sprites',
   art.includes("this.img['player_idle_' + dir]"));
 
