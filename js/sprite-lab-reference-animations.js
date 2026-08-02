@@ -28,11 +28,12 @@ const SpriteLabReferenceAnimations = (() => {
     },
     right: {
       image: 'player_walk_right_review', count: 8,
-      sequence: [0, 1, 2, 2, 3, 4, 5, 6, 6, 7], fps: 13,
+      // Exact gameplay playback for the restored July 25 backup.
+      sequence: [0, 1, 2, 3, 4, 5, 6, 7], fps: 12,
     },
     left: {
       image: 'player_walk_right_review', count: 8,
-      sequence: [0, 1, 2, 2, 3, 4, 5, 6, 6, 7], fps: 13,
+      sequence: [0, 1, 2, 3, 4, 5, 6, 7], fps: 12,
       mirror: true,
     },
   };

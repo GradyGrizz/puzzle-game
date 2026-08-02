@@ -693,11 +693,11 @@ ASSETS: {
   relic_boots: 'art/relic_boots.png',
   mi_sword: 'art/mi_sword.png', mi_depth: 'art/mi_depth.png', mi_clock: 'art/mi_clock.png',
   mi_cart: 'art/mi_cart.png', mi_gear: 'art/mi_gear.png',
-  player_idle_up: 'art/player_idle/player_idle_up.png?v=approved-7e82db7',
-  player_idle_down: 'art/player_idle/player_idle_down.png?v=approved-7e82db7',
-  player_idle_left: 'art/player_idle/player_idle_left.png?v=approved-7e82db7',
-  player_idle_right: 'art/player_idle/player_idle_right.png?v=approved-7e82db7',
-  player_walk_right_review: 'art/animations/player_walk_right/sprite_sheet_review.png?v=approved-7e82db7',
+  player_idle_up: 'art/player_idle/player_idle_up.png?v=horizontal-backup-20260725',
+  player_idle_down: 'art/player_idle/player_idle_down.png?v=horizontal-backup-20260725',
+  player_idle_left: 'art/player_idle/player_idle_left.png?v=horizontal-backup-20260725',
+  player_idle_right: 'art/player_idle/player_idle_right.png?v=horizontal-backup-20260725',
+  player_walk_right_review: 'art/animations/player_walk_right/sprite_sheet_review.png?v=horizontal-backup-20260725',
   player_walk_up_review: 'art/animations/player_walk_up/sprite_sheet_review.png?v=approved-7e82db7',
   player_walk_down_review: 'art/animations/player_walk_down/sprite_sheet_review.png?v=approved-7e82db7',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
@@ -813,13 +813,9 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
     const dh = Math.round(tile * 1.05);
     const dw = Math.round(dh * sw / sh);
     const dx = px + ((tile - dw) >> 1);
-    // A tiny whole-body drop on each full-stride contact keeps the walk from
-    // reading as a rigid torso with independently moving limbs. Frame 1 stays
-    // pixel-aligned with idle, and the feet retain their existing artwork.
-    const bob = (isUpWalk || isDownWalk) ? 0 :
-      [0, 0, 1, 0, 0, 0, 1, 0][frame % frameCount] *
-      Math.max(1, Math.round(tile / 30));
-    const dy = py + tile - dh + bob;
+    // Horizontal movement intentionally uses the preserved July 25 backup
+    // exactly as authored: no later whole-body offset is layered over it.
+    const dy = py + tile - dh;
     ctx.save();
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#000';
