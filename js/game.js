@@ -1198,6 +1198,29 @@ const ScreenGame = {
     for (const z of def.zones || []) {
       drawTextFit(ctx, z.text, b.bx + z.c * b.T, b.by + z.r * b.T + 2, Math.min(9 * b.T, 150), 1, PAL.goldHi, 'left', '#000');
     }
+    this._drawTestDoorLabels(ctx);
+  },
+  _drawTestDoorLabels(ctx) {
+    if (!this.dungeon || !this.roomId || !this._board) return;
+    const room = this.dungeon.rooms[this.roomId], b = this._board;
+    const { w, h } = Dungeon.dims(room);
+    for (const side of D_SIDES) {
+      if (!room.doors[side]) continue;
+      const nid = Dungeon.neighborId(this.dungeon, room, side);
+      const target = nid && this.dungeon.rooms[nid];
+      if (!target) continue;
+      const label = target.label || nid.toUpperCase();
+      const door = Dungeon.doorCell(w, h, side);
+      const boxW = Math.min(Math.max(58, textWidth(label, 1) + 12), b.T * 4.5);
+      const boxH = 13;
+      let x = b.bx + (door.c + 0.5) * b.T - boxW / 2;
+      let y = b.by + (door.r + (side === 'n' ? 1.15 : -0.15)) * b.T - boxH / 2;
+      if (side === 'w') { x = b.bx + b.T * 1.05; y = b.by + (door.r + 0.5) * b.T - boxH / 2; }
+      if (side === 'e') { x = b.bx + (w - 1.05) * b.T - boxW; y = b.by + (door.r + 0.5) * b.T - boxH / 2; }
+      ctx.fillStyle = 'rgba(4,6,10,0.82)'; ctx.fillRect(Math.round(x), Math.round(y), Math.round(boxW), boxH);
+      ctx.fillStyle = PAL.gold; ctx.fillRect(Math.round(x), Math.round(y), Math.round(boxW), 1);
+      drawTextFit(ctx, label, x + boxW / 2, y + 3, boxW - 8, 1, PAL.goldHi, 'center', '#000');
+    }
   },
   _drawTestDecorations(ctx) {
     const def = this.lv, b = this._board;

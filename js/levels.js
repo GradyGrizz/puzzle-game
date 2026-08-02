@@ -217,6 +217,7 @@ const TEST_DUNGEON = {
       '#.....o.....#',
       '##T#######T##',
     ], { n: 'open', s: 'open', e: 'open', w: 'open' }, {
+      label: 'HUB',
       decorations: [{ type: 'relic', item: 'sunstone', r: 4, c: 6 }],
     }),
 
@@ -234,7 +235,7 @@ const TEST_DUNGEON = {
       '#.C..h.#.u..#',
       '#..c...#....#',
       '##T#######T##',
-    ], { e: 'shutter' }, { chest: { item: 'map' } }),
+    ], { e: 'shutter' }, { label: 'PUZZLE', chest: { item: 'map' } }),
 
     // A ruined arena: broken floor, collapsed columns and a dark prison-like
     // perimeter. Every currently implemented enemy type appears here.
@@ -251,6 +252,7 @@ const TEST_DUNGEON = {
       '#p..c...c..p#',
       '##T#######T##',
     ], { w: 'open' }, {
+      label: 'COMBAT',
       dark: true,
       enemies: [
         { id: 'arena-skeleton-a', type: 'skeleton', r: 3, c: 4 },
@@ -276,6 +278,7 @@ const TEST_DUNGEON = {
       '#o...f.f...o#',
       '##T#######T##',
     ], { n: 'open' }, {
+      label: 'TRAP / RELICS',
       decorations: [{ type: 'relic', item: 'shield', r: 8, c: 6 }],
       enemies: [
         { id: 'trap-dart-a', type: 'dart', r: 3, c: 1 },
@@ -299,6 +302,7 @@ const TEST_DUNGEON = {
       '#.....o.....#',
       '##T#######T##',
     ], { s: 'open' }, {
+      label: 'TREASURE',
       chest: { item: 'sword' },
       decorations: [{ type: 'relic', item: 'sunstone', r: 5, c: 6 }],
     }),
