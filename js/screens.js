@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '7/25/2026 6:46pm (mst)';
+const BUILD_STAMP = '8/1/2026 9:04pm (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -835,6 +835,8 @@ function spriteLabAttackImage(img, direction, frame) {
 }
 
 function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
+  if (typeof SpriteLabReferenceAnimations !== 'undefined' &&
+      SpriteLabReferenceAnimations.draw(ctx, id, anim, t, x, y, tile)) return;
   if (id === 'hero') {
     const isHorizontalWalk = anim.dir === 'right' || anim.dir === 'left';
     const isUpWalk = anim.dir === 'up';
