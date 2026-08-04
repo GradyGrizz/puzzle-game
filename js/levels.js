@@ -55,7 +55,7 @@ const _BOSSC = ['##T###T##', '#.......#', '#...C...#', '#.......#', '#...x...#',
 // 11x9 grand hall (bigger room), coins scattered, door inner cells clear
 const _HALL11 = ['###T###T###', '#.........#', '#..o...o..#', '#.........#', '#....o....#', '#.........#', '#..o...o..#', '#.........#', '###########'];
 
-const DUNGEONS = [
+const DUNGEONS_LEGACY = [
   // ══ D1 · THE SUNKEN HALLS · SWORD · 12 rooms · 1 key · bramble-gated exit ══
   // Hub east = the exit, walled by bramble (need SWORD). Sword is north,
   // behind a locked door whose key sits west past a push puzzle. Backtrack.
@@ -192,6 +192,139 @@ const DUNGEONS = [
       rC: R(1, 0, _KEY, { s: 'open' }),
       rF: R(3, 1, _COIN, { w: 'open' }),
       r13: R(2, 0, _CHEST, { s: 'lock' }, { chest: { item: 'boots' }, intro: 'THE STRIDER BOOTS. NOW — BACK TO THE CHASM.' }),
+    },
+  },
+];
+
+// ── Story campaign v3: five mechanically distinct dungeon identities ──────
+// Rooms deliberately vary from compact 9x7 chambers to 15x11 set pieces.
+// Puzzle state resets on re-entry; defeated enemies remain defeated for the
+// entire run. `combat` doors open only after the current room is cleared.
+const DUNGEONS = [
+  {
+    id: 'd1', name: 'THE SUNKEN HALLS',
+    tagline: 'DROWNED COURTS, MOSSY LOCKS, AND A BLADE BELOW THE TIDE.',
+    item: 'sword', prior: [], start: { room: 'landing', r: 5, c: 4 }, goal: 'warden',
+    intro: "RAIN RUNS DOWN THE BURIED STAIR. THE SUNKEN GUARD STILL PATROLS BELOW.",
+    outro: "THE DROWNED GUARD'S BLADE IS YOURS. THE HALLS FALL SILENT.",
+    rooms: {
+      landing: R(0, 2, ['##T###T##','#.u...u.#','#...o...#','#.c...c.#','#.......#','#...@...#','#########'], { n: 'open' }),
+      nave: R(0, 1, ['###T###T###','#..u...u..#','#.#.....#.#','#...c.c...#','#o.......o#','#...c.c...#','#.#.....#.#','#..u...u..#','###########'], { s: 'open', w: 'open', e: 'open', n: 'lock' }),
+      cistern: R(-1, 1, ['###########','#s..p.p..s#','#...p.p...#','#.b.....b.#','#...c.c...#','#.........#','#.u..o..u.#','#.........#','###########'], { e: 'open', w: 'open', n: 'shutter' }),
+      chart: R(-2, 1, ['##T###T##','#.c...c.#','#...C...#','#.u...u.#','#...o...#','#.......#','#########'], { e: 'open' }, { chest: { item: 'map' } }),
+      drownedKey: R(-1, 0, ['#########','#p..k..p#','#.c...c.#','#...u...#','#.o...o.#','#.......#','##T###T##'], { s: 'open' }),
+      guardCourt: R(1, 1, ['###T#####T###','#p...c.c...p#','#..##...##..#','#...........#','#.c..o.o..c.#','#...........#','#..##...##..#','#p...c.c...p#','#############'], { w: 'open', e: 'combat' }, { enemies: [
+        { id: 'd1-sk-a', type: 'skeleton', r: 2, c: 2 }, { id: 'd1-sk-b', type: 'skeleton', r: 6, c: 10 },
+      ] }),
+      brambleRun: R(2, 1, ['##T#####T##','#....u....#','#.c..u..c.#','#....u....#','#.o..u..o.#','#....u....#','#.c..u..c.#','#....u....#','###########'], { w: 'open', e: 'open' }),
+      ironLanding: R(0, 0, ['#########','#.c...c.#','#.......#','#...o...#','#.......#','#.c...c.#','##T###T##'], { s: 'lock', n: 'open' }),
+      bladeCrypt: R(0, -1, ['##T###T##','#.u...u.#','#...C...#','#.c...c.#','#.u...u.#','#.......#','#########'], { s: 'open' }, { chest: { item: 'sword' } }),
+      warden: R(3, 1, ['##T###T##','#.c...c.#','#.......#','#...x...#','#.c...c.#','#.......#','#########'], { w: 'open' }, { boss: true, enemies: [{ id: 'd1-warden', type: 'skeleton', r: 3, c: 6 }] }),
+    },
+  },
+  {
+    id: 'd2', name: 'THE ASHEN GALLERIES',
+    tagline: 'A RING OF FURNACES BUILT AROUND A BURNING HEART.',
+    item: 'shield', prior: ['sword'], start: { room: 'kilnGate', r: 7, c: 6 }, goal: 'ashThrone',
+    intro: 'THE FLOOD ENDS AT A RED IRON DOOR. BEYOND IT, THE KEEP IS STILL BURNING.',
+    outro: "THE WARDEN'S SHIELD DRINKS THE HEAT. THE FURNACES GUTTER OUT.",
+    rooms: {
+      kilnGate: R(0, 2, ['###T#####T###','#...........#','#.c.......c.#','#.....o.....#','#.f.......f.#','#.c.......c.#','#...........#','#.....@.....#','#############'], { n: 'open' }),
+      furnaceHub: R(0, 1, ['##T#######T##','#f...#.#...f#','#....#.#....#','#.c.......c.#','#.....f.....#','#.c.......c.#','#....#.#....#','#f...#.#...f#','#############'], { s: 'open', w: 'open', n: 'open', e: 'open' }),
+      coalWorks: R(-1, 1, ['###########','#s.f...f.s#','#.........#','#.b..h..b.#','#....f....#','#.c.....c.#','#.........#','#o.......o#','##T#####T##'], { e: 'open', w: 'combat' }, { enemies: [
+        { id: 'd2-tribe-a', type: 'tribalist', r: 2, c: 5 }, { id: 'd2-sk-a', type: 'skeleton', r: 6, c: 5 },
+      ] }),
+      emberVault: R(-2, 1, ['##T###T##','#f..k..f#','#.c...c.#','#...o...#','#.c...c.#','#f.....f#','#########'], { e: 'open' }),
+      smokeMap: R(0, 0, ['#########','#f.....f#','#...C...#','#.c...c.#','#...f...#','#.......#','##T###T##'], { s: 'open', e: 'open' }, { chest: { item: 'map' } }),
+      flue: R(1, 0, ['###########','#f...c...f#','#.###.###.#','#.....o...#','#.###.###.#','#f...c...f#','#.........#','#...k.....#','##T#####T##'], { w: 'open', s: 'lock' }),
+      fireDance: R(1, 1, ['###############','#f..f..f..f..f#','#.............#','#..c..p..c....#','#f....o....f..#','#....c..p..c..#','#.............#','#f..f..f..f..f#','###############'], { n: 'lock', w: 'open', e: 'combat' }, { enemies: [
+        { id: 'd2-tribe-b', type: 'tribalist', r: 2, c: 3 }, { id: 'd2-tribe-c', type: 'tribalist', r: 6, c: 11 },
+        { id: 'd2-sk-b', type: 'skeleton', r: 4, c: 7 },
+      ] }),
+      shieldForge: R(2, 1, ['##T#####T##','#f.......f#','#...C.....#','#.c.....c.#','#...h.h...#','#.c.....c.#','#f.......f#','#.........#','###########'], { w: 'open', e: 'open' }, { chest: { item: 'shield' } }),
+      coolingHall: R(3, 1, ['###########','#....f....#','#.c..f..c.#','#....f....#','#.o..f..o.#','#....f....#','#.c..f..c.#','#....f....#','##T#####T##'], { w: 'open', e: 'open' }),
+      ashThrone: R(4, 1, ['##T###T##','#f.....f#','#.c...c.#','#...x...#','#.c...c.#','#f.....f#','#########'], { w: 'open' }, { boss: true, enemies: [{ id: 'd2-ashguard', type: 'skeleton', r: 3, c: 6 }] }),
+    },
+  },
+  {
+    id: 'd3', name: 'THE IRON VAULTS',
+    tagline: 'A MECHANICAL STOREHOUSE OF WEIGHT, LEVERS, AND MOVING STONE.',
+    item: 'glove', prior: ['sword', 'shield'], start: { room: 'freightLift', r: 5, c: 4 }, goal: 'treasury',
+    intro: 'CHAINS SHUDDER ABOVE A VAULT BUILT TO MAKE TREASURE TOO HEAVY TO STEAL.',
+    outro: 'THE TITAN GLOVE CLOSES AROUND YOUR ARM. IRON NOW ANSWERS TO YOU.',
+    rooms: {
+      freightLift: R(0, 3, ['#########','#h.....h#','#.c...c.#','#...o...#','#.......#','#...@...#','##T###T##'], { n: 'open' }),
+      sortingFloor: R(0, 2, ['###T#####T###','#h.........h#','#..s.....s..#','#...........#','#..b.....b..#','#.....o.....#','#.c.......c.#','#h.........h#','#############'], { s: 'open', e: 'shutter', n: 'open' }),
+      chainGallery: R(0, 1, ['###########','#h..c.c..h#','#.........#','#.###.###.#','#....o....#','#.###.###.#','#.........#','#h..c.c..h#','##T#####T##'], { s: 'open', w: 'open' }),
+      keyCrane: R(-1, 1, ['##T###T##','#h..k..h#','#.c...c.#','#...s...#','#...b...#','#.......#','#########'], { e: 'open' }),
+      pressRoom: R(1, 2, ['###############','#s...h...h...s#','#.............#','#..###...###..#','#..b.......b..#','#.....c.c.....#','#..###...###..#','#o...........o#','###############'], { w: 'open', n: 'combat' }, { enemies: [
+        { id: 'd3-sk-a', type: 'skeleton', r: 3, c: 2 }, { id: 'd3-sk-b', type: 'skeleton', r: 5, c: 10 },
+      ] }),
+      records: R(1, 1, ['###########','#h...C...h#','#.c.....c.#','#...###...#','#....o....#','#...###...#','#.c.....c.#','#h.......h#','##T#####T##'], { s: 'open', e: 'lock' }, { chest: { item: 'map' } }),
+      lockworks: R(2, 1, ['##T#####T##','#h..s.s..h#','#...b.b...#','#.........#','#.c..o..c.#','#.........#','#h.......h#','#.........#','###########'], { w: 'lock', n: 'shutter' }),
+      titanTest: R(2, 0, ['#############','#h....s....h#','#.....h.....#','#.c.......c.#','#.....o.....#','#.c.......c.#','#.....h.....#','#h.........h#','###T#####T###'], { s: 'open', w: 'open' }),
+      gloveVault: R(1, 0, ['##T###T##','#h.....h#','#...C...#','#.c...c.#','#...h...#','#.......#','#########'], { e: 'open', w: 'open' }, { chest: { item: 'glove' } }),
+      crusherRun: R(0, 0, ['###########','#....h....#','#.c..h..c.#','#....h....#','#.o..h..o.#','#....h....#','#.c..h..c.#','#....h....#','##T#####T##'], { e: 'open', w: 'combat' }, { enemies: [
+        { id: 'd3-tribe-a', type: 'tribalist', r: 2, c: 2 }, { id: 'd3-tribe-b', type: 'tribalist', r: 6, c: 8 },
+      ] }),
+      treasury: R(-1, 0, ['##T###T##','#h.....h#','#.c...c.#','#...x...#','#.c...c.#','#h.....h#','#########'], { e: 'open' }, { boss: true, enemies: [{ id: 'd3-treasurer', type: 'skeleton', r: 3, c: 6 }] }),
+    },
+  },
+  {
+    id: 'd4', name: 'THE LIGHTLESS DEEP',
+    tagline: 'ONE CANDLE, A BLACK LABYRINTH, AND A LANTERN LOST WITHIN.',
+    item: 'lantern', prior: ['sword', 'shield', 'glove'], start: { room: 'candle', r: 7, c: 6 }, goal: 'blindKing',
+    intro: 'THE DOOR CLOSES. TOTAL DARKNESS. YOU LIGHT A SINGLE CANDLE SAVED FROM THE IRON VAULTS; ITS PALE SQUARE IS ALL YOU CAN SEE.',
+    outro: 'THE PALE LANTERN OPENS THE DARK TO FIVE PACES. THE DEEP CAN HIDE NO LONGER.',
+    rooms: {
+      candle: R(0, 3, ['#############','#...........#','#.c.......c.#','#...........#','#.....f.....#','#...........#','#.c.......c.#','#.....@.....#','###T#####T###'], { n: 'open' }, { dark: true }),
+      blindCross: R(0, 2, ['#############','#p.........p#','#...#...#...#','#...........#','#.#...o...#.#','#...........#','#...#...#...#','#p.........p#','#############'], { s: 'open', w: 'open', e: 'open', n: 'combat' }, { dark: true, enemies: [
+        { id: 'd4-sk-a', type: 'skeleton', r: 2, c: 6 }, { id: 'd4-sk-b', type: 'skeleton', r: 6, c: 6 },
+      ] }),
+      whisperMaze: R(-1, 2, ['###########','#...#.....#','#.#.#.###.#','#.#...#...#','#.#####.#.#','#.....#.#.#','#####.#.#.#','#k......#.#','##T#####T##'], { e: 'open', n: 'open' }, { dark: true }),
+      echoMap: R(-1, 1, ['##T#####T##','#p.......p#','#...C.....#','#.###.###.#','#....o....#','#.###.###.#','#p.......p#','#.........#','###########'], { s: 'open' }, { dark: true, chest: { item: 'map' } }),
+      hunterHall: R(1, 2, ['###############','#p...........p#','#...###.###...#','#.............#','#.c....o....c.#','#.............#','#...###.###...#','#p...........p#','###############'], { w: 'open', n: 'combat' }, { dark: true, enemies: [
+        { id: 'd4-tribe-a', type: 'tribalist', r: 2, c: 3 }, { id: 'd4-tribe-b', type: 'tribalist', r: 6, c: 11 },
+        { id: 'd4-sk-c', type: 'skeleton', r: 4, c: 7 },
+      ] }),
+      blackLock: R(1, 1, ['###########','#p..c.c..p#','#.........#','#.###.###.#','#....k....#','#.###.###.#','#.........#','#p..c.c..p#','##T#####T##'], { s: 'open', w: 'lock' }, { dark: true }),
+      sealedDark: R(0, 1, ['#############','#s.........s#','#...........#','#..b.....b..#','#.....p.....#','#..c.....c..#','#...........#','#p.........p#','#############'], { s: 'combat', e: 'lock', n: 'shutter' }, { dark: true }),
+      lanternTomb: R(0, 0, ['##T#####T##','#p.......p#','#...C.....#','#.c.....c.#','#....f....#','#.c.....c.#','#p.......p#','#.........#','###########'], { s: 'open', e: 'open' }, { dark: true, chest: { item: 'lantern' } }),
+      revealedHall: R(1, 0, ['###############','#p...c...c...p#','#...###.###...#','#.............#','#..o.......o..#','#.............#','#...###.###...#','#p...c...c...p#','###############'], { w: 'open', e: 'combat' }, { dark: true, enemies: [
+        { id: 'd4-sk-d', type: 'skeleton', r: 2, c: 3 }, { id: 'd4-sk-e', type: 'skeleton', r: 6, c: 11 },
+        { id: 'd4-tribe-c', type: 'tribalist', r: 4, c: 12 },
+      ] }),
+      paleBridge: R(2, 0, ['###########','#p.p...p.p#','#.........#','#.c.....c.#','#....o....#','#.c.....c.#','#.........#','#p.p...p.p#','##T#####T##'], { w: 'open', e: 'open' }, { dark: true }),
+      blindKing: R(3, 0, ['##T###T##','#p.....p#','#.c...c.#','#...x...#','#.c...c.#','#p.....p#','#########'], { w: 'open' }, { boss: true, dark: true, enemies: [{ id: 'd4-king', type: 'skeleton', r: 3, c: 6 }] }),
+    },
+  },
+  {
+    id: 'd5', name: 'THE ABYSSAL DESCENT',
+    tagline: 'A VERTICAL RUIN WHERE EVERY PATH CROSSES THE VOID.',
+    item: 'boots', prior: ['sword', 'shield', 'glove', 'lantern'], start: { room: 'rim', r: 7, c: 6 }, goal: 'sunstone',
+    intro: "THE KEEP'S LAST STAIR HANGS ABOVE AN ENDLESS SHAFT. THE SUNSTONE BURNS SOMEWHERE BELOW.",
+    outro: 'THE SUNSTONE RISES WARM IN YOUR HAND. FAR ABOVE, THE KEEP BEGINS TO WAKE.',
+    rooms: {
+      rim: R(0, 4, ['#############','#p.........p#','#.c.......c.#','#.....o.....#','#p.........p#','#.c.......c.#','#...........#','#.....@.....#','###T#####T###'], { n: 'open' }),
+      switchback: R(0, 3, ['###############','#p...........p#','#..p.......p..#','#....p...p....#','#......o......#','#....p...p....#','#..p.......p..#','#p...........p#','###############'], { s: 'open', w: 'open', e: 'open', n: 'open' }),
+      westLedge: R(-1, 3, ['###########','#p..c.c..p#','#.........#','#.p.....p.#','#....k....#','#.p.....p.#','#.........#','#p..c.c..p#','##T#####T##'], { e: 'open', n: 'open', s: 'combat' }, { enemies: [
+        { id: 'd5-tribe-a', type: 'tribalist', r: 2, c: 5 }, { id: 'd5-sk-a', type: 'skeleton', r: 6, c: 5 },
+      ] }),
+      cartographer: R(-1, 4, ['##T#####T##','#p.......p#','#...C.....#','#.p.....p.#','#....o....#','#.p.....p.#','#p.......p#','#.........#','###########'], { n: 'open' }, { chest: { item: 'map' } }),
+      eastFall: R(1, 3, ['#############','#p...c...c.p#','#...p...p...#','#...........#','#..p..o..p..#','#...........#','#...p...p...#','#p.c...c...p#','#############'], { w: 'open', n: 'combat' }, { enemies: [
+        { id: 'd5-sk-b', type: 'skeleton', r: 2, c: 3 }, { id: 'd5-sk-c', type: 'skeleton', r: 6, c: 9 },
+        { id: 'd5-tribe-b', type: 'tribalist', r: 4, c: 6 },
+      ] }),
+      hangingCells: R(1, 2, ['###########','#p.#...#.p#','#..#...#..#','#.c.....c.#','#....k....#','#.c.....c.#','#..#...#..#','#p.#...#.p#','##T#####T##'], { s: 'open', w: 'lock' }),
+      deepHub: R(0, 2, ['#############','#p...c.c...p#','#..##...##..#','#...........#','#.p...o...p.#','#...........#','#..##...##..#','#p...c.c...p#','#############'], { s: 'open', e: 'lock', w: 'open', n: 'open' }),
+      bootTrial: R(-1, 2, ['###############','#.............#','#......p......#','#s.b...p...b.s#','#......p......#','#..c...p...c..#','#......p......#','#o...........o#','###############'], { s: 'open', e: 'open', n: 'shutter' }),
+      striderCrypt: R(-1, 1, ['##T#####T##','#p.......p#','#...C.....#','#.c.....c.#','#....o....#','#.c.....c.#','#p.......p#','#.........#','###########'], { s: 'open', e: 'open' }, { chest: { item: 'boots' } }),
+      voidArena: R(0, 1, ['###############','#p.p.......p.p#','#...###.###...#','#.............#','#p....o.o....p#','#.............#','#...###.###...#','#p.p.......p.p#','###############'], { w: 'open', s: 'open', e: 'combat' }, { enemies: [
+        { id: 'd5-sk-d', type: 'skeleton', r: 2, c: 3 }, { id: 'd5-sk-e', type: 'skeleton', r: 6, c: 11 },
+        { id: 'd5-tribe-c', type: 'tribalist', r: 3, c: 10 }, { id: 'd5-tribe-d', type: 'tribalist', r: 5, c: 4 },
+      ] }),
+      finalSpan: R(1, 1, ['#############','#.....p.....#','#.c...p...c.#','#.....p.....#','#.o...p...o.#','#.....p.....#','#.c...p...c.#','#.....p.....#','###T#####T###'], { w: 'open', e: 'open' }),
+      sunstone: R(2, 1, ['##T#####T##','#p.......p#','#.c.....c.#','#...C.....#','#....x....#','#.c.....c.#','#p.......p#','#.........#','###########'], { w: 'open' }, { boss: true, chest: { item: 'sunstone' }, enemies: [{ id: 'd5-lastguard', type: 'skeleton', r: 5, c: 7 }] }),
     },
   },
 ];

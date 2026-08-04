@@ -146,6 +146,7 @@ const FM = {
         if (st.keys > 0) { st.keys--; g.dkeys = st.keys; g._unlockDoor(g.roomId, d.side); g._doors = g._doorCells(); events.push({ type: 'unlock' }); }
         else events.push({ type: 'lockedBump' });
       } else if (d.type === 'shutter') events.push({ type: 'shutterBump' });
+      else if (d.type === 'combat') events.push({ type: 'combatBump' });
     }
     // classify remaining contacts
     let block = null, bush = null, chest = null;

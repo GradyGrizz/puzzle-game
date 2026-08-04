@@ -3,6 +3,8 @@ const path = require('path');
 const { Combat } = require(path.join(__dirname, '..', 'js', 'combat.js'));
 const { TEST_DUNGEON } = require(path.join(__dirname, '..', 'js', 'levels.js'));
 const Engine = require(path.join(__dirname, '..', 'js', 'engine.js'));
+global.Engine = Engine;
+const { Dungeon } = require(path.join(__dirname, '..', 'js', 'dungeon.js'));
 let failures = 0;
 function expect(name, cond) { if (cond) console.log('  OK  combat: ' + name); else { console.error('FAIL  combat: ' + name); failures++; } }
 const openWorld = { solid: () => false, lineClear: () => true };
@@ -61,6 +63,17 @@ const player = (rolling) => ({ x: 1.5, y: 1.5, dir: 'right', rolling: !!rolling 
 {
   const st = Combat.create([{ id: 'dead', type: 'skeleton', r: 1, c: 2 }], { dead: true });
   expect('defeated enemies stay defeated within a run', st.enemies.length === 0);
+}
+{
+  const st = Combat.create([{ id: 'tribe', type: 'tribalist', r: 1, c: 2 }], {});
+  expect('masked tribalist is a supported ranged enemy', st.enemies.length === 1 && st.enemies[0].type === 'tribalist');
+}
+{
+  const room = { gx: 0, gy: 0, map: ['#####', '#...#', '#...#', '#...#', '#####'], doors: { e: 'combat' } };
+  const dun = { rooms: { arena: room } };
+  const st = Engine.parseLevel({ map: room.map });
+  expect('combat seal stays shut while enemies remain', !Dungeon.passableSides(dun, 'arena', st, {}, false, false).e);
+  expect('combat seal opens after the room is cleared', Dungeon.passableSides(dun, 'arena', st, {}, false, true).e);
 }
 
 const testRooms = Object.values(TEST_DUNGEON.rooms);

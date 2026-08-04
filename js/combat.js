@@ -7,6 +7,7 @@ const Combat = {
   ENEMY: {
     skeleton: { hp: 3, speed: 1.35, aggro: 7, range: 0.95, windup: 25 / 36, cooldown: 0.9 },
     dart:     { hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
+    tribalist:{ hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
   },
   PLAYER_MAX_HP: 5,
   PLAYER_INVULN: 0.75,

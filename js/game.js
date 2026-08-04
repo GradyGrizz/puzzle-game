@@ -18,6 +18,7 @@ const ScreenGame = {
     this.run = params.run || null;
     this.dungeon = null;
     this.combatDefeated = {};
+    this.combatCleared = {};
 
     if (this.gameMode === 'story') {
       // multi-room dungeon
@@ -227,6 +228,8 @@ const ScreenGame = {
       } else { Snd.bump(); this.showToast('LOCKED. FIND A KEY.'); return; }
     } else if (type === 'shutter' && !(this.solved[this.roomId] || Dungeon.roomSolved(this.state))) {
       Snd.bump(); this.showToast('SEALED. SOLVE THIS ROOM.'); return;
+    } else if (type === 'combat' && !this._roomCombatCleared(this.roomId)) {
+      Snd.bump(); this.showToast('SEALED. DEFEAT EVERY ENEMY.'); return;
     }
     this._beginRoomTransition(side);
   },
@@ -249,7 +252,8 @@ const ScreenGame = {
   _doorCells() {
     const room = this.dungeon.rooms[this.roomId];
     const { w, h } = Dungeon.dims(room);
-    const pass = Dungeon.passableSides(this.dungeon, this.roomId, this.state, this.unlocked, this.solved[this.roomId]);
+    const pass = Dungeon.passableSides(this.dungeon, this.roomId, this.state, this.unlocked,
+      this.solved[this.roomId], this._roomCombatCleared(this.roomId));
     const out = {};
     for (const side of D_SIDES) {
       const type = room.doors[side];
@@ -342,7 +346,17 @@ const ScreenGame = {
     this.combatKey = key || 'room';
     if (reset || !this.combatDefeated[this.combatKey]) this.combatDefeated[this.combatKey] = {};
     this.combat = Combat.create(spawns, this.combatDefeated[this.combatKey]);
+    if ((spawns || []).length && this.combat.enemies.length === 0) this.combatCleared[this.combatKey] = true;
     this.deathT = 0;
+  },
+
+  _roomCombatCleared(roomId) {
+    if (this.combatCleared[roomId]) return true;
+    if (!this.dungeon || !this.dungeon.rooms[roomId]) return true;
+    const spawns = this.dungeon.rooms[roomId].enemies || [];
+    if (!spawns.length) return true;
+    const defeated = this.combatDefeated[roomId] || {};
+    return spawns.every((s, i) => defeated[s.id || ('enemy-' + i)]);
   },
 
   _combatWorld() {
@@ -373,6 +387,11 @@ const ScreenGame = {
       else if (ev.type === 'enemyDead') {
         this.combatDefeated[this.combatKey][ev.enemy.id] = true;
         if (Snd.enemyDown) Snd.enemyDown();
+        if (this.dungeon && this.combat && this.combat.enemies.every(e => e.dead)) {
+          this.combatCleared[this.combatKey] = true;
+          if (Snd.exitOpen) Snd.exitOpen();
+          this.showToast('THE COMBAT SEAL BREAKS.');
+        }
       } else if (ev.type === 'dartFired') { if (Snd.dart) Snd.dart(); }
       else if (ev.type === 'dartImpact') { if (Snd.dartHit) Snd.dartHit(); }
       else if (ev.type === 'playerHit') {
@@ -424,6 +443,7 @@ const ScreenGame = {
     const need = evs.find(e => e.type === 'needItem'); if (need) this._needToast(need.item);
     if (has('lockedBump')) this._needToast('key');
     if (has('shutterBump') && this._needToastT <= 0) { this._needToastT = 1.2; this.showToast('SEALED. SOLVE THIS ROOM.'); }
+    if (has('combatBump') && this._needToastT <= 0) { this._needToastT = 1.2; this.showToast('SEALED. DEFEAT EVERY ENEMY.'); }
     const chestE = evs.find(e => e.type === '_chest');
     if (chestE) {
       this._pushHistory(chestE.before);
@@ -717,7 +737,10 @@ const ScreenGame = {
     this.filled = {};
     this.exitGlow = 0;
     const combatSpawns = this.dungeon ? (this.dungeon.rooms[this.roomId].enemies || []) : [];
-    this._startCombat(combatSpawns, this.gameMode === 'test' ? 'test' : this.roomId, true);
+    // Story enemies stay defeated for the entire dungeon run. Only the
+    // isolated test arena deliberately respawns them on a manual reset.
+    this._startCombat(combatSpawns, this.gameMode === 'test' ? 'test' : this.roomId,
+      this.gameMode === 'test');
     Snd.back();
   },
   _recomputeFilled() {
@@ -1084,13 +1107,15 @@ const ScreenGame = {
     ctx.restore();
     this._drawPlayerAttack(ctx);
 
-    // darkness: a lit circle only when the PALE LANTERN is equipped;
-    // otherwise the dark closes in and nudges you to the gear screen
+    // Lightless Deep progression is deliberately grid-readable: the carried
+    // candle reveals only the player's 1x1 cell; the Pale Lantern expands the
+    // fully visible area to a maximum 5x5 square centered on the player.
     if (st.dark) {
-      const radius = this.inventory().lantern ? 2.4 : 0.55;
+      const hasLantern = !!this.inventory().lantern;
+      const radius = hasLantern ? 2 : 0;
       for (let r = 0; r < st.h; r++) for (let c = 0; c < st.w; c++) {
         const d = Math.max(Math.abs(r - hr), Math.abs(c - hc));
-        let a = Math.min(0.94, Math.max(0, (d - radius) * 0.55));
+        let a = d <= radius ? 0 : Math.min(0.96, 0.78 + (d - radius) * 0.10);
         if (a <= 0) continue;
         const tl = st.tiles[r][c];
         if (tl === TILE.FIRE) a *= 0.25;      // flames pierce the dark
@@ -1098,9 +1123,11 @@ const ScreenGame = {
         ctx.fillStyle = `rgba(1,2,4,${a})`;
         ctx.fillRect(bx + c * T, by + r * T, T, T);
       }
-      // soft lantern tint
+      // Warm tint stays inside the same authored visibility footprint.
+      const lightCells = hasLantern ? 5 : 1;
       ctx.fillStyle = 'rgba(240,200,110,0.045)';
-      ctx.fillRect(bx + (hc - 1.5) * T, by + (hr - 1.5) * T, T * 4, T * 4);
+      ctx.fillRect(bx + (hc - radius) * T, by + (hr - radius) * T,
+        T * lightCells, T * lightCells);
     }
 
     if (this.gameMode === 'test') this._drawTestOverlays(ctx, W, H);

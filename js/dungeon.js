@@ -7,6 +7,7 @@
 // Door types (declared per room per side in the data):
 //   open    — always passable
 //   shutter — barred until THIS room is solved (all switches covered)
+//   combat  — barred until every authored enemy in THIS room is defeated
 //   lock    — needs a key (consumed once, then permanently open)
 // A side with no door is solid wall. Neighbour rooms are found by grid
 // adjacency. Reaching the exit stairs in the goal room clears the dungeon.
@@ -46,7 +47,7 @@ const Dungeon = {
 
   // which sides of `room` are currently passable, given its live state and
   // the set of unlocked lock-doors (keyed "roomId:side")
-  passableSides(dun, roomId, state, unlocked, solvedLatch) {
+  passableSides(dun, roomId, state, unlocked, solvedLatch, combatClear) {
     const room = dun.rooms[roomId];
     const out = {};
     const doors = room.doors || {};
@@ -59,6 +60,7 @@ const Dungeon = {
       if (type === 'open') out[side] = true;
       else if (type === 'shutter') out[side] = solved;
       else if (type === 'lock') out[side] = !!unlocked[roomId + ':' + side];
+      else if (type === 'combat') out[side] = !!combatClear;
     }
     return out;
   },

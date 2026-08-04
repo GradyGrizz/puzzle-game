@@ -6,12 +6,14 @@
 //     inner cell from a cell you can already stand in (pushing blocks, cutting
 //     bushes, etc. with the items you currently hold)
 //   - keys and the relic are only collected if you can reach them in-room
-//   - shutter doors need the room solved; locks need a spare key
+//   - shutter doors need the room solved; combat seals need the room cleared;
+//     locks need a spare key
 // Then it checks: all rooms reachable, the relic obtained before the boss
 // room, the boss room reachable, the map chest reachable, and every switch
 // room individually solvable with its arrival inventory.
 // Run: node tests/dungeons.test.js
 const path = require('path');
+const fs = require('fs');
 const E = require(path.join(__dirname, '..', 'js', 'engine.js'));
 const { DUNGEONS } = require(path.join(__dirname, '..', 'js', 'levels.js'));
 
@@ -128,6 +130,7 @@ for (const dun of DUNGEONS) {
         let passable = false, useState = fresh;
         if (type === 'open') passable = true;
         else if (type === 'shutter') { const ss = solvedState(room, items); if (ss) { passable = true; useState = ss; } }
+        else if (type === 'combat') passable = !!(room.enemies && room.enemies.length);
         else if (type === 'lock') passable = opened.has(id + ':' + side) || keysAvail > 0;
         if (!passable) continue;
         if (!reachAny(useState, items, starts, inner)) continue;   // can't physically get to the door
@@ -172,6 +175,37 @@ for (const dun of DUNGEONS) {
   }
   check('door entry cells are walkable', entryOk, badEntry && 'at ' + badEntry);
 }
+
+// ── campaign-wide identity / scale / combat / darkness guarantees ──
+const allRooms = DUNGEONS.flatMap(d => Object.entries(d.rooms).map(([id, room]) => ({ d, id, room })));
+const mapSignatures = allRooms.map(x => x.room.map.join('\n'));
+check('every story room has a unique authored layout', new Set(mapSignatures).size === mapSignatures.length);
+check('every authored room has uniform row widths', allRooms.every(({ room }) =>
+  room.map.every(row => row.length === room.map[0].length)));
+check('every dungeon mixes at least three room scales', DUNGEONS.every(d =>
+  new Set(Object.values(d.rooms).map(r => r.map[0].length + 'x' + r.map.length)).size >= 3));
+check('every dungeon includes a large set-piece room', DUNGEONS.every(d =>
+  Object.values(d.rooms).some(r => r.map[0].length >= 13 && r.map.length >= 9)));
+check('every dungeon contains a defeat-to-open combat seal', DUNGEONS.every(d =>
+  Object.values(d.rooms).some(r => Object.values(r.doors).includes('combat') && (r.enemies || []).length)));
+const storyEnemies = allRooms.flatMap(x => x.room.enemies || []);
+check('story uses only skeleton and masked tribalist enemies', storyEnemies.length > 0 &&
+  storyEnemies.every(e => e.type === 'skeleton' || e.type === 'tribalist'));
+check('every story enemy spawns on a walkable floor cell', allRooms.every(({ room }) =>
+  (room.enemies || []).every(e => room.map[e.r] && '.ocks@'.includes(room.map[e.r][e.c]))));
+const graphSignatures = DUNGEONS.map(d => Object.values(d.rooms)
+  .map(r => r.gx + ',' + r.gy + ':' + Object.keys(r.doors).sort().join('')).sort().join('|'));
+check('all five dungeon graphs are structurally distinct', new Set(graphSignatures).size === DUNGEONS.length);
+
+const deep = DUNGEONS.find(d => d.id === 'd4');
+const gameSource = fs.readFileSync(path.join(__dirname, '..', 'js', 'game.js'), 'utf8');
+check('every Lightless Deep room is dark', Object.values(deep.rooms).every(r => r.dark));
+check('Lightless Deep begins with the one-cell candle scene', /SINGLE CANDLE/.test(deep.intro) &&
+  gameSource.includes('const radius = hasLantern ? 2 : 0'));
+check('Pale Lantern expands visibility to exactly five by five',
+  gameSource.includes('const lightCells = hasLantern ? 5 : 1'));
+check('story resets preserve defeated enemies',
+  gameSource.includes("this.gameMode === 'test');") && gameSource.includes('Story enemies stay defeated'));
 
 console.log(failures ? '\n' + failures + ' FAILURE(S)' : '\nALL DUNGEON CHECKS PASSED');
 process.exit(failures ? 1 : 0);

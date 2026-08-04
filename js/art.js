@@ -293,7 +293,7 @@ doorLocked(ctx, x, y, t) {
   ctx.fillStyle = '#4a3010'; ctx.fillRect(lx - 1, ly + 5, 3, 2);
 },
 
-// room-edge doorway punched through the border wall. type: open|shutter|lock
+// room-edge doorway punched through the border wall. type: open|shutter|lock|combat
 doorway(ctx, x, y, t, side, type, open) {
   this.wall(ctx, x, y, t);
   const horiz = (side === 'n' || side === 's');
@@ -311,13 +311,18 @@ doorway(ctx, x, y, t, side, type, open) {
     // faint cool light spilling from the room beyond
     ctx.fillStyle = 'rgba(90,110,150,0.16)';
     ctx.fillRect(ox + 1, oy + 1, ow - 2, oh - 2);
-  } else if (type === 'shutter') {
+  } else if (type === 'shutter' || type === 'combat') {
     // barred iron portcullis
     ctx.fillStyle = '#3a4658';
     if (horiz) { for (let i = 0; i < 4; i++) { const bx = ox + 2 + i * Math.floor((ow - 4) / 3.2); ctx.fillRect(bx, oy + 1, 3, oh - 2); } }
     else { for (let i = 0; i < 4; i++) { const by = oy + 2 + i * Math.floor((oh - 4) / 3.2); ctx.fillRect(ox + 1, by, ow - 2, 3); } }
     ctx.fillStyle = '#556278';
     if (horiz) ctx.fillRect(ox, oy + 1, ow, 2); else ctx.fillRect(ox + 1, oy, 2, oh);
+    if (type === 'combat') {
+      ctx.fillStyle = PAL.red;
+      const cx = ox + Math.floor(ow / 2), cy = oy + Math.floor(oh / 2);
+      ctx.fillRect(cx - 3, cy - 3, 6, 2); ctx.fillRect(cx - 1, cy - 5, 2, 10);
+    }
   } else if (type === 'lock') {
     // heavy locked slab with a gold keyhole
     ctx.fillStyle = '#3a2410'; ctx.fillRect(ox, oy, ow, oh);
