@@ -948,8 +948,10 @@ _ripperLit() {
   return (this._rlit = cv);
 },
 
-// o: { bob, squash, sink (0..1 buried), shake, flash (0..1), alpha, scale }
+// o: { bob, sink (0..1 buried), shake, flash (0..1), alpha, scale }
 // x,y are the sprite's tile-box top-left; the creature stands on y + tile.
+// NOTE: there is deliberately no squash/stretch — the approved design must
+// never be warped. Motion comes from whole-pixel offsets and floor clipping.
 ripper(ctx, dir, x, y, tile, o) {
   const im = this.img.ripper;
   if (!this._ready(im)) return false;
@@ -960,9 +962,8 @@ ripper(ctx, dir, x, y, tile, o) {
   if (sink >= 1) return true;                        // fully underground
   // one scale for every direction keeps the four views in true proportion
   const sc = (tile * 1.25 * (o.scale == null ? 1 : o.scale)) / chh;
-  const sq = o.squash || 0;
-  const dw = cw * sc * (1 + sq * 0.5);
-  const dh = chh * sc * (1 - sq);
+  const dw = cw * sc;
+  const dh = chh * sc;
   const ground = y + tile;
   const dx = Math.round(x + (tile - dw) / 2 + (o.shake || 0));
   const dy = Math.round(ground - dh + (o.bob || 0) + sink * dh);
@@ -1003,6 +1004,47 @@ ripperMound(ctx, x, y, tile, t, active) {
       ctx.fillStyle = i & 1 ? '#7d6142' : '#5a462f';
       ctx.fillRect(cx + Math.cos(a) * w * 0.5, cy - 2 + Math.sin(a * 1.3) * h * 0.5, rr, rr);
     }
+  }
+  ctx.restore();
+},
+
+// a single churned mark along the tunnel. `kind` lets later variants swap the
+// spoil for magma/frost/crystal without touching the AI.
+ripperTrailMark(ctx, x, y, tile, life, kind) {
+  const k = Math.max(0, Math.min(1, life));
+  if (k <= 0) return;
+  const cx = x + tile / 2, cy = y + tile * 0.72;
+  const pal = kind === 'magma' ? ['#c4501c', '#7a2a10', '#3a1608']
+    : kind === 'frost' ? ['#a8d8e8', '#5f93ad', '#2c4a5c']
+    : kind === 'crystal' ? ['#b48ad8', '#6f4a96', '#33204a']
+    : ['#7d6142', '#5a462f', '#3a2c1c'];             // dirt (default)
+  ctx.save();
+  ctx.globalAlpha *= 0.25 + k * 0.65;
+  const w = tile * 0.34 * (0.6 + k * 0.4);
+  ctx.fillStyle = pal[2];
+  ctx.beginPath(); ctx.ellipse(cx, cy, w, w * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = pal[1];
+  ctx.beginPath(); ctx.ellipse(cx, cy - 1, w * 0.7, w * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  // a couple of loose clods
+  ctx.fillStyle = pal[0];
+  const s = Math.max(1, Math.round(tile * 0.06));
+  ctx.fillRect(Math.round(cx - w * 0.5), Math.round(cy - 2), s, s);
+  ctx.fillRect(Math.round(cx + w * 0.3), Math.round(cy + 1), s, s);
+  ctx.restore();
+},
+
+// dizzy stars while it reels from a missed ambush
+ripperStars(ctx, x, y, tile, t) {
+  const cx = x + tile / 2, cy = y + tile * 0.12;
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const a = t * 4 + (i / 3) * Math.PI * 2;
+    const sx = cx + Math.cos(a) * tile * 0.34;
+    const sy = cy + Math.sin(a) * tile * 0.12;
+    const s = Math.max(1, Math.round(tile * 0.07));
+    ctx.fillStyle = i === 0 ? '#fff2a8' : '#f0c040';
+    ctx.fillRect(Math.round(sx - s), Math.round(sy), s * 3, s);
+    ctx.fillRect(Math.round(sx), Math.round(sy - s), s, s * 3);
   }
   ctx.restore();
 },

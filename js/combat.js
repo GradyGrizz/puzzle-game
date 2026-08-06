@@ -8,13 +8,30 @@ const Combat = {
     skeleton: { hp: 3, speed: 1.35, aggro: 7, range: 0.95, windup: 25 / 36, cooldown: 0.9 },
     dart:     { hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
     tribalist:{ hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
-    // EARTH RIPPER — armoured burrower with a rock-drill snout. Stalks, dives,
-    // tunnels underneath (untouchable) and bursts out into a straight drill
-    // charge. Slamming a wall jams the drill and leaves it stunned: the window.
-    ripper:   {
-      hp: 4, speed: 1.15, aggro: 8, range: 1.0, windup: 0.42, cooldown: 1.1,
-      burrowSpeed: 2.4, chargeSpeed: 5.6, chargeMax: 1.35,
-      stunTime: 1.5, diveTime: 0.5, riseTime: 0.45, stalkTime: 2.2, tunnelMax: 4.0,
+    // EARTH RIPPER — a burrowing ambush enemy. It locks onto where you are
+    // standing, commits to that spot, and loses track of you the moment it
+    // goes under. Bait it, step aside, and punish the stunned miss.
+    // Every field below is tuning; variants (magma/frost/crystal/corrupted)
+    // can reuse the AI by overriding these plus `trail`.
+    ripper: {
+      maxHealth: 2,            // 1-2 sword hits
+      aggro: 6.5,              // detectionRange (tiles)
+      roamSpeed: 0.55,         // slow wander
+      undergroundSpeed: 3.2,   // moderately fast while tunnelling
+      lockOnDuration: 0.4,     // readable "it saw me" tell
+      burrowStartDuration: 0.3,
+      emergenceDelay: 0.12,    // beat under the target before bursting out
+      emergeRise: 0.22,        // how long the body takes to rise
+      stunDuration: 0.5,       // the punish window after a miss
+      recoverDuration: 0.3,
+      attackCooldown: 1.4,     // no instant re-attacks
+      contactDamage: 1,
+      emergenceDamage: 1,
+      emergenceRadius: 0.85,   // small and fair
+      trailSpawnInterval: 0.07,
+      trailLifetime: 0.9,
+      maxUnderground: 3.5,     // safety: never tunnel forever
+      trail: 'dirt',           // variants swap this for magma/frost/crystal
     },
   },
   PLAYER_MAX_HP: 5,
@@ -29,9 +46,10 @@ const Combat = {
       enemies: (spawns || []).filter((s, i) => !gone[s.id || ('enemy-' + i)]).map((s, i) => {
         const type = this.ENEMY[s.type] ? s.type : 'skeleton';
         const cfg = this.ENEMY[type];
+        const hp = cfg.maxHealth != null ? cfg.maxHealth : cfg.hp;
         return {
           id: s.id || ('enemy-' + i), type, x: s.c + 0.5, y: s.r + 0.5,
-          hp: cfg.hp, maxHp: cfg.hp, state: 'idle', timer: 0,
+          hp, maxHp: hp, state: 'idle', timer: 0,
           cooldown: (i % 3) * 0.18, flash: 0, dead: false, faceX: 0, faceY: 1,
         };
       }),
@@ -89,7 +107,7 @@ const Combat = {
     }[player.dir] || [0, 1];
     for (const e of state.enemies) {
       if (e.dead) continue;
-      if (this.untouchable(e)) continue;      // buried / armour-plated mid-charge
+      if (this.untouchable(e)) continue;      // below the floor: nothing to cut
       const dx = e.x - player.x, dy = e.y - player.y;
       const dist = Math.hypot(dx, dy);
       const dot = dist > 0 ? (dx * dir[0] + dy * dir[1]) / dist : 1;
@@ -108,22 +126,38 @@ const Combat = {
     }
   },
 
-  // A Ripper below ground, or plated behind its drill mid-charge, cannot be
-  // cut. Everything else is always a legal target.
+  // Only a Ripper that is actually below the floor is safe from the blade.
+  // Above ground it is always a legal target — the stunned miss is simply the
+  // easiest opening, not the only one.
   untouchable(e) {
     if (e.type !== 'ripper') return false;
-    return e.state === 'under' || e.state === 'charge' ||
-      (e.state === 'dive' && e.timer < this.ENEMY.ripper.diveTime * 0.45) ||
-      (e.state === 'rise' && e.timer > this.ENEMY.ripper.riseTime * 0.65);
+    return e.state === 'under' || this.ripperSink(e) > 0.75;
   },
 
-  // how far out of the ground it is: 0 = fully up, 1 = fully buried
+  // how far under the floor it is: 0 = fully up, 1 = fully buried
   ripperSink(e) {
     const cfg = this.ENEMY.ripper;
     if (e.state === 'under') return 1;
-    if (e.state === 'dive') return Math.min(1, 1 - Math.max(0, e.timer) / cfg.diveTime);
-    if (e.state === 'rise') return Math.max(0, Math.min(1, e.timer / cfg.riseTime));
+    if (e.state === 'burrow') return Math.min(1, 1 - Math.max(0, e.timer) / cfg.burrowStartDuration);
+    if (e.state === 'emerge') {
+      // holds under the floor for emergenceDelay, then rises
+      const rise = Math.max(0, e.timer - 0);
+      return Math.max(0, Math.min(1, rise / cfg.emergeRise));
+    }
     return 0;
+  },
+
+  // nearest cell the creature can legally stand in, searched outward
+  _nearestClear(world, x, y) {
+    if (!world.solid(x, y, 0.27)) return { x, y };
+    for (let r = 0.5; r <= 4; r += 0.5) {
+      for (let a = 0; a < 12; a++) {
+        const t = (a / 12) * Math.PI * 2;
+        const nx = x + Math.cos(t) * r, ny = y + Math.sin(t) * r;
+        if (!world.solid(nx, ny, 0.27)) return { x: nx, y: ny };
+      }
+    }
+    return null;
   },
 
   _updateEnemy(state, e, world, player, dt, events) {
@@ -131,10 +165,10 @@ const Combat = {
     let dx = player.x - e.x, dy = player.y - e.y;
     const dist = Math.hypot(dx, dy) || 0.001;
     dx /= dist; dy /= dist;
-    if (e.type !== 'ripper' || (e.state !== 'charge' && e.state !== 'wind')) {
-      e.faceX = dx; e.faceY = dy;                 // a committed charge holds its line
-    }
+    // the Ripper aims itself (it must hold its heading once committed), so it
+    // is dispatched before the generic "always face the player" rule
     if (e.type === 'ripper') { this._updateRipper(state, e, world, player, dt, events, cfg, dx, dy, dist); return; }
+    e.faceX = dx; e.faceY = dy;
     if (dist > cfg.aggro) { e.state = 'idle'; return; }
 
     if (e.state === 'windup') {
@@ -165,84 +199,136 @@ const Combat = {
     }
   },
 
-  // EARTH RIPPER loop: stalk -> dive -> tunnel under you -> burst out ->
-  // wind up -> drill charge -> (slam a wall) -> stunned and open to the blade.
+  // EARTH RIPPER loop — bait, dodge, punish:
+  //   roam -> spot you -> LOCK the tile you are standing on -> burrow ->
+  //   tunnel blind to that saved tile -> burst out -> hit, or miss and reel.
+  // The commitment is the whole point: once it is under, it has no idea where
+  // you actually are, so stepping aside is always the correct answer.
   _updateRipper(state, e, world, player, dt, events, cfg, dx, dy, dist) {
     e.timer -= dt;
+    if (e.trail) { for (const m of e.trail) m.t -= dt; e.trail = e.trail.filter(m => m.t > 0); }
+
+    const faceTo = (fx, fy) => {
+      const m = Math.hypot(fx, fy);
+      if (m > 0.001) { e.faceX = fx / m; e.faceY = fy / m; }
+    };
+    const touch = () => {
+      if (dist < 0.72) this._hurtPlayer(state, player, cfg.contactDamage, -dx, -dy, events, 'ripper');
+    };
+
     switch (e.state) {
 
-      case 'wind':                                   // rears back: the tell
+      // ── committed: sinking out of sight, target already locked ──
+      case 'burrow':
         if (e.timer <= 0) {
-          const ax = Math.abs(e.faceX) > Math.abs(e.faceY);
-          e.chargeX = ax ? Math.sign(e.faceX) : 0;
-          e.chargeY = ax ? 0 : Math.sign(e.faceY);
-          e.state = 'charge'; e.timer = cfg.chargeMax;
-          events.push({ type: 'ripperCharge', enemy: e });
-        }
-        return;
-
-      case 'charge': {                               // straight-line drill rush
-        const before = { x: e.x, y: e.y };
-        this._move(e, e.chargeX, e.chargeY, cfg.chargeSpeed * dt, world);
-        const moved = Math.hypot(e.x - before.x, e.y - before.y);
-        if (dist < 0.78) this._hurtPlayer(state, player, 1, -dx, -dy, events, 'ripper');
-        if (moved < cfg.chargeSpeed * dt * 0.35) {    // jammed into stone
-          e.state = 'stun'; e.timer = cfg.stunTime;
-          events.push({ type: 'ripperSlam', enemy: e });
-        } else if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
-        return;
-      }
-
-      case 'stun':                                   // drill stuck, wide open
-        if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
-        return;
-
-      case 'dive':                                   // sinking out of sight
-        if (e.timer <= 0) {
-          e.state = 'under'; e.timer = cfg.tunnelMax;
-          e.safeX = e.x; e.safeY = e.y;              // the spot it dived from is always safe
+          e.state = 'under'; e.timer = cfg.maxUnderground;
+          e.safeX = e.x; e.safeY = e.y;
           events.push({ type: 'ripperDig', enemy: e });
         }
         return;
 
-      case 'under': {                                // tunnelling: only a mound shows
-        this._move(e, dx, dy, cfg.burrowSpeed * dt, world, true);
-        // remember the last spot it could legally stand, so it always has
-        // somewhere to come back up even after tunnelling under blocks
-        const clear = !world.solid(e.x, e.y, 0.27);
-        if (clear) { e.safeX = e.x; e.safeY = e.y; }
-        if (dist < 0.9 || e.timer <= 0) {
-          if (clear) {
-            e.state = 'rise'; e.timer = cfg.riseTime;
-            events.push({ type: 'ripperBurst', enemy: e });
-          } else if (e.timer <= -1.2 && e.safeX != null) {
-            // stuck under something solid — surface at the last clear spot
-            e.x = e.safeX; e.y = e.safeY;
-            e.state = 'rise'; e.timer = cfg.riseTime;
-            events.push({ type: 'ripperBurst', enemy: e });
-          }
+      // ── blind travel to the SAVED tile (never re-targets the player) ──
+      case 'under': {
+        const tx = e.lockX, ty = e.lockY;
+        let vx = tx - e.x, vy = ty - e.y;
+        const d = Math.hypot(vx, vy) || 0.0001;
+        // slight wobble so it reads as a burrowing creature, not a projectile
+        const wob = Math.sin((cfg.maxUnderground - e.timer) * 9) * 0.22;
+        const nx = (vx / d) - (vy / d) * wob, ny = (vy / d) + (vx / d) * wob;
+        this._move(e, nx, ny, cfg.undergroundSpeed * dt, world, true);
+        faceTo(vx, vy);
+        if (!world.solid(e.x, e.y, 0.27)) { e.safeX = e.x; e.safeY = e.y; }
+        this._ripperTrail(e, cfg, dt);
+        // arrived (or ran out of patience / got stuck): come up
+        const arrived = d <= 0.18;
+        if (arrived || e.timer <= 0) {
+          let spot = this._nearestClear(world, e.x, e.y);
+          if (!spot && e.safeX != null) spot = { x: e.safeX, y: e.safeY };
+          if (spot) { e.x = spot.x; e.y = spot.y; }
+          e.state = 'emerge'; e.timer = cfg.emergeRise + cfg.emergenceDelay;
+          e.struckOnEmerge = false;
+          events.push({ type: 'ripperBurst', enemy: e });
         }
         return;
       }
 
-      case 'rise':                                   // bursting back out
-        if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
+      // ── bursting out: one hit check, at the spot it committed to ──
+      case 'emerge': {
+        if (!e.struckOnEmerge && e.timer <= cfg.emergeRise) {
+          e.struckOnEmerge = true;                       // resolve the ambush once
+          const hit = Math.hypot(player.x - e.x, player.y - e.y) <= cfg.emergenceRadius;
+          if (hit) {
+            this._hurtPlayer(state, player, cfg.emergenceDamage,
+              player.x - e.x, player.y - e.y, events, 'ripper');
+            e.missed = false;
+          } else {
+            e.missed = true;                             // whiffed: it is now yours
+            events.push({ type: 'ripperMiss', enemy: e });
+          }
+        }
+        if (e.timer <= 0) {
+          if (e.missed) { e.state = 'stun'; e.timer = cfg.stunDuration; }
+          else { e.state = 'recover'; e.timer = cfg.recoverDuration; }
+        }
+        return;
+      }
+
+      // ── the punish window: dazed, rooted, fully vulnerable ──
+      case 'stun':
+        if (e.timer <= 0) { e.state = 'recover'; e.timer = cfg.recoverDuration; }
         return;
 
-      default: {                                     // surfaced: stalk or commit
-        if (dist > cfg.aggro) { e.state = 'idle'; return; }
-        if (dist < 0.8) this._hurtPlayer(state, player, 1, -dx, -dy, events, 'ripper');
-        // lined up on an axis and close enough? commit to the charge
-        const lined = Math.abs(player.x - e.x) < 0.5 || Math.abs(player.y - e.y) < 0.5;
-        if (dist < 4.6 && lined && e.cooldown <= 0) {
-          e.state = 'wind'; e.timer = cfg.windup; e.cooldown = cfg.cooldown;
+      // ── shaking it off before it may attack again ──
+      case 'recover':
+        if (e.timer <= 0) { e.state = 'idle'; e.timer = 0; e.cooldown = cfg.attackCooldown; }
+        return;
+
+      // ── winding up: facing you, saving the tile you are standing on ──
+      case 'lockon':
+        faceTo(dx, dy);
+        touch();
+        if (e.timer <= 0) {
+          const spot = this._nearestClear(world, player.x, player.y);   // never lock a wall
+          e.lockX = spot ? spot.x : e.x;
+          e.lockY = spot ? spot.y : e.y;
+          e.state = 'burrow'; e.timer = cfg.burrowStartDuration;
+        }
+        return;
+
+      // ── idle / roam ──
+      default: {
+        touch();
+        if (dist <= cfg.aggro && e.cooldown <= 0) {
+          e.state = 'lockon'; e.timer = cfg.lockOnDuration;
+          faceTo(dx, dy);
           events.push({ type: 'enemyWindup', enemy: e });
           return;
         }
-        this._move(e, dx, dy, cfg.speed * dt, world);
-        if (e.timer <= 0) { e.state = 'dive'; e.timer = cfg.diveTime; }   // reposition
+        // slow wander: pick a nearby spot, amble to it, pick another
+        if (e.roamX == null || e.timer <= 0 ||
+            Math.hypot(e.roamX - e.x, e.roamY - e.y) < 0.25) {
+          const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 2;
+          const spot = this._nearestClear(world, e.x + Math.cos(a) * r, e.y + Math.sin(a) * r);
+          e.roamX = spot ? spot.x : e.x; e.roamY = spot ? spot.y : e.y;
+          e.timer = 1.5 + Math.random();
+        }
+        let rx = e.roamX - e.x, ry = e.roamY - e.y;
+        const rd = Math.hypot(rx, ry) || 1;
+        this._move(e, rx / rd, ry / rd, cfg.roamSpeed * dt, world);
+        faceTo(rx, ry);
         return;
       }
+    }
+  },
+
+  // dirt churned up along the tunnel, so the path is always readable
+  _ripperTrail(e, cfg, dt) {
+    e.trail = e.trail || [];
+    e.trailT = (e.trailT || 0) - dt;
+    if (e.trailT <= 0) {
+      e.trailT = cfg.trailSpawnInterval;
+      e.trail.push({ x: e.x, y: e.y, t: cfg.trailLifetime, life: cfg.trailLifetime });
+      if (e.trail.length > 40) e.trail.shift();
     }
   },
 
@@ -318,35 +404,55 @@ const Combat = {
     }
   },
 
-  // Draws the uploaded Earth Ripper sprite. Only transforms here — the pose
-  // changes come from bob/squash/shake/sink, never from redrawn artwork.
+  // Draws the uploaded Earth Ripper sprite. The sprite itself is never warped,
+  // stretched or recoloured — pose changes come only from whole-pixel offsets
+  // and from clipping it at the floor line as it sinks or rises. Dirt, dust
+  // and dizzy stars are separate VFX drawn around the creature, not on it.
   _drawRipper(ctx, x, y, T, e, t) {
     if (typeof Art === 'undefined' || !Art.ripper) return;
     const cfg = this.ENEMY.ripper;
+
+    // the churned tunnel is drawn first, underneath everything
+    if (e.trail && e.trail.length) {
+      for (const m of e.trail) {
+        const mx = x + (m.x - e.x) * T, my = y + (m.y - e.y) * T;
+        Art.ripperTrailMark(ctx, mx, my, T, m.t / (m.life || cfg.trailLifetime), cfg.trail);
+      }
+    }
+
     const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
       ? (e.faceX > 0 ? 'right' : 'left')
       : (e.faceY > 0 ? 'down' : 'up');
     const sink = this.ripperSink(e);
-    if (e.state === 'under') { Art.ripperMound(ctx, x, y, T, t, true); return; }
+
+    if (e.state === 'under') {                     // body hidden; only the mound
+      Art.ripperMound(ctx, x, y, T, t, true);
+      return;
+    }
+
     const o = { sink, flash: e.flash > 0 ? Math.min(1, e.flash * 5) : 0 };
-    if (e.state === 'wind') {                       // hunkers down before the rush
-      const k = 1 - Math.max(0, e.timer) / cfg.windup;
-      o.squash = 0.10 * k;
-      o.shake = Math.sin(t * 46) * 1.6 * k;
-    } else if (e.state === 'charge') {              // stretched into the lunge
-      o.squash = -0.06;
-      o.bob = Math.sin(t * 30) * T * 0.02;
-    } else if (e.state === 'stun') {                // drill jammed, reeling
-      o.shake = Math.sin(t * 34) * 2.2;
-      o.squash = 0.06;
-    } else if (!sink) {                             // trundling walk
-      o.bob = Math.sin(t * 7) * T * 0.045;
-      o.squash = Math.max(0, Math.sin(t * 14)) * 0.05;
+    const px = Math.max(1, Math.round(T / 30));    // one "art pixel" at this zoom
+
+    if (e.state === 'stun') {
+      // dizzy: whole-pixel sway, no distortion
+      o.shake = Math.round(Math.sin(t * 26) * 1.6) * px;
+    } else if (e.state === 'lockon') {
+      // the tell: a tight shiver in place
+      o.shake = Math.round(Math.sin(t * 60) * 1.2) * px;
+    } else if (e.state === 'idle' || e.state === 'recover') {
+      // slow plodding bob — a 2-step cycle, integer pixels only
+      o.bob = (Math.sin(t * 5) > 0 ? -1 : 0) * px;
     }
     if (e.dead) o.scale = 1 - Math.min(1, -e.timer / 0.35) * 0.4;
+
     if (sink > 0 && sink < 1) Art.ripperMound(ctx, x, y, T, t, false);
     Art.ripper(ctx, dir, x, y, T, o);
-    if (e.state === 'rise' || e.state === 'dive') Art.ripperDust(ctx, x, y, T, 1 - Math.abs(0.5 - sink) * 2);
+
+    // dirt kicked up while digging in or bursting out
+    if (e.state === 'burrow') Art.ripperDust(ctx, x, y, T, 1 - sink);
+    else if (e.state === 'emerge') Art.ripperDust(ctx, x, y, T, sink);
+    // stars while it reels
+    if (e.state === 'stun') Art.ripperStars(ctx, x, y, T, t);
   },
 
   _drawSkeleton(ctx, x, y, T, e) {

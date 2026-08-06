@@ -403,8 +403,7 @@ const ScreenGame = {
         }
       } else if (ev.type === 'ripperDig') { if (Snd.ripperDig) Snd.ripperDig(); }
       else if (ev.type === 'ripperBurst') { if (Snd.ripperBurst) Snd.ripperBurst(); Platform.haptic('light'); }
-      else if (ev.type === 'ripperCharge') { if (Snd.ripperCharge) Snd.ripperCharge(); }
-      else if (ev.type === 'ripperSlam') { if (Snd.ripperSlam) Snd.ripperSlam(); Platform.haptic('heavy'); }
+      else if (ev.type === 'ripperMiss') { if (Snd.ripperMiss) Snd.ripperMiss(); Platform.haptic('heavy'); }
       else if (ev.type === 'dartFired') { if (Snd.dart) Snd.dart(); }
       else if (ev.type === 'dartImpact') { if (Snd.dartHit) Snd.dartHit(); }
       else if (ev.type === 'playerHit') {

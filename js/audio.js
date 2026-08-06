@@ -165,8 +165,9 @@ const Snd = {
   // ── Earth Ripper ──
   ripperDig()    { this.noise(0.34, 0.10, 0, 260); this.tone(90, 0.30, 'sawtooth', 0.07, 0, 45); },
   ripperBurst()  { this.noise(0.22, 0.15, 0, 420); this.tone(150, 0.20, 'square', 0.09, 0, 320); },
-  ripperCharge() { this.tone(190, 0.26, 'sawtooth', 0.10, 0, 420); this.noise(0.20, 0.07, 0, 900); },
-  ripperSlam()   { this.tone(64, 0.20, 'sine', 0.28); this.noise(0.16, 0.16, 0, 380); },
+  // whiffed the ambush: heavy thud then a woozy little wobble
+  ripperMiss()   { this.tone(64, 0.20, 'sine', 0.26); this.noise(0.14, 0.13, 0, 380);
+                   [330, 262, 300, 240].forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.07, this.now(0.14 + i * 0.08))); },
   dart()      { this.tone(820, 0.06, 'triangle', 0.09, 0, 420); },
   dartHit()   { this.noise(0.05, 0.07, 0, 1800); },
   playerHit() { this.tone(140, 0.14, 'sawtooth', 0.16, 0, 75); },
