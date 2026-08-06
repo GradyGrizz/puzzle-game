@@ -706,6 +706,7 @@ ASSETS: {
   player_walk_up_review: 'art/animations/player_walk_up/sprite_sheet_review.png?v=approved-7e82db7',
   player_walk_down_review: 'art/animations/player_walk_down/sprite_sheet_review.png?v=approved-7e82db7',
   skeleton: 'art/skeleton.png', masked_tribalist: 'art/masked_tribalist.png',
+  ripper: 'art/earth_ripper.png',
   skeleton_attack_right: 'art/skeleton_attack_right.png',
   skeleton_attack_right_01: 'art/animations/skeleton_attack_right/frame_01_anticipation.png',
   skeleton_attack_right_02: 'art/animations/skeleton_attack_right/frame_02_transition.png',
@@ -920,6 +921,106 @@ hero(ctx, dir, frame, px, py, tile, pushing, idle) {
   } else {
     ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
   }
+},
+
+// ── Earth Ripper ─────────────────────────────────────────────
+// art/earth_ripper.png IS the master reference: four cells in the order
+// down, left, right, up — each the uploaded sprite untouched (exact pixels,
+// palette, shell pattern, drill, eyes, claws, outlines and shading),
+// chroma-keyed off its black background and bottom-aligned in its cell.
+// Every animation state is a pure TRANSFORM of those real pixels — walk
+// bob/squash, sinking into the floor, stun shake, hit flash, death fade —
+// so each frame reads as the same creature, never a redrawn version of it.
+RIPPER_DIRS: ['down', 'left', 'right', 'up'],
+
+// white silhouette of the sheet, built once, for the hit flash
+_ripperLit() {
+  const im = this.img.ripper;
+  if (!this._ready(im)) return null;
+  if (this._rlit) return this._rlit;
+  const cv = document.createElement('canvas');
+  cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+  const c = cv.getContext('2d');
+  c.drawImage(im, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, cv.width, cv.height);
+  return (this._rlit = cv);
+},
+
+// o: { bob, squash, sink (0..1 buried), shake, flash (0..1), alpha, scale }
+// x,y are the sprite's tile-box top-left; the creature stands on y + tile.
+ripper(ctx, dir, x, y, tile, o) {
+  const im = this.img.ripper;
+  if (!this._ready(im)) return false;
+  o = o || {};
+  const cw = im.naturalWidth / 4, chh = im.naturalHeight;
+  const di = Math.max(0, this.RIPPER_DIRS.indexOf(dir));
+  const sink = Math.max(0, Math.min(1, o.sink || 0));
+  if (sink >= 1) return true;                        // fully underground
+  // one scale for every direction keeps the four views in true proportion
+  const sc = (tile * 1.25 * (o.scale == null ? 1 : o.scale)) / chh;
+  const sq = o.squash || 0;
+  const dw = cw * sc * (1 + sq * 0.5);
+  const dh = chh * sc * (1 - sq);
+  const ground = y + tile;
+  const dx = Math.round(x + (tile - dw) / 2 + (o.shake || 0));
+  const dy = Math.round(ground - dh + (o.bob || 0) + sink * dh);
+  ctx.save();
+  // multiply, so an outer fade (death/flash set by the caller) still applies
+  if (o.alpha != null) ctx.globalAlpha *= o.alpha;
+  if (sink > 0) {                                    // clip at the floor line
+    ctx.beginPath();
+    ctx.rect(x - tile, y - tile * 3, tile * 3, (ground - y) + tile * 3);
+    ctx.clip();
+  }
+  ctx.drawImage(im, di * cw, 0, cw, chh, dx, dy, dw, dh);
+  if (o.flash > 0) {
+    const lit = this._ripperLit();
+    if (lit) {
+      ctx.globalAlpha *= Math.min(1, o.flash);
+      ctx.drawImage(lit, di * cw, 0, cw, chh, dx, dy, dw, dh);
+    }
+  }
+  ctx.restore();
+  return true;
+},
+
+// churned earth it travels under — terrain spray, not the creature
+ripperMound(ctx, x, y, tile, t, active) {
+  const cx = x + tile / 2, cy = y + tile * 0.72;
+  const w = tile * (active ? 0.72 : 0.56), h = tile * 0.26;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, w * 0.55, h * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4a3a2a';
+  ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.5, h * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#6b5338';
+  ctx.beginPath(); ctx.ellipse(cx, cy - 1, w * 0.36, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  if (active) {
+    for (let i = 0; i < 5; i++) {
+      const a = t * 6 + i * 1.7, rr = (i % 3) + 1;
+      ctx.fillStyle = i & 1 ? '#7d6142' : '#5a462f';
+      ctx.fillRect(cx + Math.cos(a) * w * 0.5, cy - 2 + Math.sin(a * 1.3) * h * 0.5, rr, rr);
+    }
+  }
+  ctx.restore();
+},
+
+// dirt kicked up as it breaks the surface or dives
+ripperDust(ctx, x, y, tile, p) {
+  const cx = x + tile / 2, cy = y + tile * 0.82;
+  const k = Math.max(0, Math.min(1, p));
+  ctx.save();
+  ctx.globalAlpha *= 1 - k;
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + i;
+    const d = tile * (0.15 + k * 0.65);
+    const s = Math.max(1, Math.round(tile * 0.09 * (1 - k)));
+    ctx.fillStyle = i % 3 === 0 ? '#8a6c48' : (i % 3 === 1 ? '#6b5338' : '#4a3a2a');
+    ctx.fillRect(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.55, s, s);
+  }
+  ctx.restore();
 },
 
 // ── UI chrome ────────────────────────────────────────────────

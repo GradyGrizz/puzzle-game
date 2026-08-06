@@ -16,6 +16,7 @@ const path = require('path');
 const fs = require('fs');
 const E = require(path.join(__dirname, '..', 'js', 'engine.js'));
 const { DUNGEONS } = require(path.join(__dirname, '..', 'js', 'levels.js'));
+const { Combat } = require(path.join(__dirname, '..', 'js', 'combat.js'));
 
 const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
 const GRID = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
@@ -189,8 +190,10 @@ check('every dungeon includes a large set-piece room', DUNGEONS.every(d =>
 check('every dungeon contains a defeat-to-open combat seal', DUNGEONS.every(d =>
   Object.values(d.rooms).some(r => Object.values(r.doors).includes('combat') && (r.enemies || []).length)));
 const storyEnemies = allRooms.flatMap(x => x.room.enemies || []);
-check('story uses only skeleton and masked tribalist enemies', storyEnemies.length > 0 &&
-  storyEnemies.every(e => e.type === 'skeleton' || e.type === 'tribalist'));
+// every authored enemy must name a type the combat sim actually implements,
+// so a typo ('skelton') still fails while new creatures need no test edit
+check('story enemies all use types the combat sim knows', storyEnemies.length > 0 &&
+  storyEnemies.every(e => Object.prototype.hasOwnProperty.call(Combat.ENEMY, e.type)));
 check('every story enemy spawns on a walkable floor cell', allRooms.every(({ room }) =>
   (room.enemies || []).every(e => room.map[e.r] && '.ocks@'.includes(room.map[e.r][e.c]))));
 const graphSignatures = DUNGEONS.map(d => Object.values(d.rooms)

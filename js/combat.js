@@ -8,6 +8,14 @@ const Combat = {
     skeleton: { hp: 3, speed: 1.35, aggro: 7, range: 0.95, windup: 25 / 36, cooldown: 0.9 },
     dart:     { hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
     tribalist:{ hp: 2, speed: 1.05, aggro: 9, range: 7.0, windup: 0.48, cooldown: 1.45 },
+    // EARTH RIPPER — armoured burrower with a rock-drill snout. Stalks, dives,
+    // tunnels underneath (untouchable) and bursts out into a straight drill
+    // charge. Slamming a wall jams the drill and leaves it stunned: the window.
+    ripper:   {
+      hp: 4, speed: 1.15, aggro: 8, range: 1.0, windup: 0.42, cooldown: 1.1,
+      burrowSpeed: 2.4, chargeSpeed: 5.6, chargeMax: 1.35,
+      stunTime: 1.5, diveTime: 0.5, riseTime: 0.45, stalkTime: 2.2, tunnelMax: 4.0,
+    },
   },
   PLAYER_MAX_HP: 5,
   PLAYER_INVULN: 0.75,
@@ -81,6 +89,7 @@ const Combat = {
     }[player.dir] || [0, 1];
     for (const e of state.enemies) {
       if (e.dead) continue;
+      if (this.untouchable(e)) continue;      // buried / armour-plated mid-charge
       const dx = e.x - player.x, dy = e.y - player.y;
       const dist = Math.hypot(dx, dy);
       const dot = dist > 0 ? (dx * dir[0] + dy * dir[1]) / dist : 1;
@@ -99,12 +108,33 @@ const Combat = {
     }
   },
 
+  // A Ripper below ground, or plated behind its drill mid-charge, cannot be
+  // cut. Everything else is always a legal target.
+  untouchable(e) {
+    if (e.type !== 'ripper') return false;
+    return e.state === 'under' || e.state === 'charge' ||
+      (e.state === 'dive' && e.timer < this.ENEMY.ripper.diveTime * 0.45) ||
+      (e.state === 'rise' && e.timer > this.ENEMY.ripper.riseTime * 0.65);
+  },
+
+  // how far out of the ground it is: 0 = fully up, 1 = fully buried
+  ripperSink(e) {
+    const cfg = this.ENEMY.ripper;
+    if (e.state === 'under') return 1;
+    if (e.state === 'dive') return Math.min(1, 1 - Math.max(0, e.timer) / cfg.diveTime);
+    if (e.state === 'rise') return Math.max(0, Math.min(1, e.timer / cfg.riseTime));
+    return 0;
+  },
+
   _updateEnemy(state, e, world, player, dt, events) {
     const cfg = this.ENEMY[e.type];
     let dx = player.x - e.x, dy = player.y - e.y;
     const dist = Math.hypot(dx, dy) || 0.001;
     dx /= dist; dy /= dist;
-    e.faceX = dx; e.faceY = dy;
+    if (e.type !== 'ripper' || (e.state !== 'charge' && e.state !== 'wind')) {
+      e.faceX = dx; e.faceY = dy;                 // a committed charge holds its line
+    }
+    if (e.type === 'ripper') { this._updateRipper(state, e, world, player, dt, events, cfg, dx, dy, dist); return; }
     if (dist > cfg.aggro) { e.state = 'idle'; return; }
 
     if (e.state === 'windup') {
@@ -135,11 +165,98 @@ const Combat = {
     }
   },
 
-  _move(e, dx, dy, step, world) {
+  // EARTH RIPPER loop: stalk -> dive -> tunnel under you -> burst out ->
+  // wind up -> drill charge -> (slam a wall) -> stunned and open to the blade.
+  _updateRipper(state, e, world, player, dt, events, cfg, dx, dy, dist) {
+    e.timer -= dt;
+    switch (e.state) {
+
+      case 'wind':                                   // rears back: the tell
+        if (e.timer <= 0) {
+          const ax = Math.abs(e.faceX) > Math.abs(e.faceY);
+          e.chargeX = ax ? Math.sign(e.faceX) : 0;
+          e.chargeY = ax ? 0 : Math.sign(e.faceY);
+          e.state = 'charge'; e.timer = cfg.chargeMax;
+          events.push({ type: 'ripperCharge', enemy: e });
+        }
+        return;
+
+      case 'charge': {                               // straight-line drill rush
+        const before = { x: e.x, y: e.y };
+        this._move(e, e.chargeX, e.chargeY, cfg.chargeSpeed * dt, world);
+        const moved = Math.hypot(e.x - before.x, e.y - before.y);
+        if (dist < 0.78) this._hurtPlayer(state, player, 1, -dx, -dy, events, 'ripper');
+        if (moved < cfg.chargeSpeed * dt * 0.35) {    // jammed into stone
+          e.state = 'stun'; e.timer = cfg.stunTime;
+          events.push({ type: 'ripperSlam', enemy: e });
+        } else if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
+        return;
+      }
+
+      case 'stun':                                   // drill stuck, wide open
+        if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
+        return;
+
+      case 'dive':                                   // sinking out of sight
+        if (e.timer <= 0) {
+          e.state = 'under'; e.timer = cfg.tunnelMax;
+          e.safeX = e.x; e.safeY = e.y;              // the spot it dived from is always safe
+          events.push({ type: 'ripperDig', enemy: e });
+        }
+        return;
+
+      case 'under': {                                // tunnelling: only a mound shows
+        this._move(e, dx, dy, cfg.burrowSpeed * dt, world, true);
+        // remember the last spot it could legally stand, so it always has
+        // somewhere to come back up even after tunnelling under blocks
+        const clear = !world.solid(e.x, e.y, 0.27);
+        if (clear) { e.safeX = e.x; e.safeY = e.y; }
+        if (dist < 0.9 || e.timer <= 0) {
+          if (clear) {
+            e.state = 'rise'; e.timer = cfg.riseTime;
+            events.push({ type: 'ripperBurst', enemy: e });
+          } else if (e.timer <= -1.2 && e.safeX != null) {
+            // stuck under something solid — surface at the last clear spot
+            e.x = e.safeX; e.y = e.safeY;
+            e.state = 'rise'; e.timer = cfg.riseTime;
+            events.push({ type: 'ripperBurst', enemy: e });
+          }
+        }
+        return;
+      }
+
+      case 'rise':                                   // bursting back out
+        if (e.timer <= 0) { e.state = 'idle'; e.timer = cfg.stalkTime; }
+        return;
+
+      default: {                                     // surfaced: stalk or commit
+        if (dist > cfg.aggro) { e.state = 'idle'; return; }
+        if (dist < 0.8) this._hurtPlayer(state, player, 1, -dx, -dy, events, 'ripper');
+        // lined up on an axis and close enough? commit to the charge
+        const lined = Math.abs(player.x - e.x) < 0.5 || Math.abs(player.y - e.y) < 0.5;
+        if (dist < 4.6 && lined && e.cooldown <= 0) {
+          e.state = 'wind'; e.timer = cfg.windup; e.cooldown = cfg.cooldown;
+          events.push({ type: 'enemyWindup', enemy: e });
+          return;
+        }
+        this._move(e, dx, dy, cfg.speed * dt, world);
+        if (e.timer <= 0) { e.state = 'dive'; e.timer = cfg.diveTime; }   // reposition
+        return;
+      }
+    }
+  },
+
+  _move(e, dx, dy, step, world, underground) {
+    // a tunnelling creature passes under blocks and hazards; only the room's
+    // outer stone stops it (falls back to normal collision if the world can't
+    // tell the difference, so the sim still runs standalone in tests)
+    const blocked = underground && world.solidWall
+      ? (x, y) => world.solidWall(x, y, 0.27)
+      : (x, y) => world.solid(x, y, 0.27);
     const nx = e.x + dx * step;
-    if (!world.solid(nx, e.y, 0.27)) e.x = nx;
+    if (!blocked(nx, e.y)) e.x = nx;
     const ny = e.y + dy * step;
-    if (!world.solid(e.x, ny, 0.27)) e.y = ny;
+    if (!blocked(e.x, ny)) e.y = ny;
   },
 
   _updateProjectiles(state, world, player, dt, events) {
@@ -181,6 +298,7 @@ const Combat = {
       if (e.flash > 0) ctx.globalAlpha = 0.45 + 0.55 * Math.sin(t * 55);
       if (e.dead) ctx.globalAlpha = Math.max(0, 1 + e.timer / 0.35);
       if (e.type === 'skeleton') this._drawSkeleton(ctx, x, y, T, e);
+      else if (e.type === 'ripper') this._drawRipper(ctx, x, y, T, e, t);
       else this._drawDarter(ctx, x, y, T, e);
       ctx.restore();
     }
@@ -198,6 +316,37 @@ const Combat = {
       ctx.fillRect(x - 3, y - T * 0.36, 6, T * 0.72);
       ctx.fillRect(x - T * 0.36, y - 3, T * 0.72, 6);
     }
+  },
+
+  // Draws the uploaded Earth Ripper sprite. Only transforms here — the pose
+  // changes come from bob/squash/shake/sink, never from redrawn artwork.
+  _drawRipper(ctx, x, y, T, e, t) {
+    if (typeof Art === 'undefined' || !Art.ripper) return;
+    const cfg = this.ENEMY.ripper;
+    const dir = Math.abs(e.faceX) > Math.abs(e.faceY)
+      ? (e.faceX > 0 ? 'right' : 'left')
+      : (e.faceY > 0 ? 'down' : 'up');
+    const sink = this.ripperSink(e);
+    if (e.state === 'under') { Art.ripperMound(ctx, x, y, T, t, true); return; }
+    const o = { sink, flash: e.flash > 0 ? Math.min(1, e.flash * 5) : 0 };
+    if (e.state === 'wind') {                       // hunkers down before the rush
+      const k = 1 - Math.max(0, e.timer) / cfg.windup;
+      o.squash = 0.10 * k;
+      o.shake = Math.sin(t * 46) * 1.6 * k;
+    } else if (e.state === 'charge') {              // stretched into the lunge
+      o.squash = -0.06;
+      o.bob = Math.sin(t * 30) * T * 0.02;
+    } else if (e.state === 'stun') {                // drill jammed, reeling
+      o.shake = Math.sin(t * 34) * 2.2;
+      o.squash = 0.06;
+    } else if (!sink) {                             // trundling walk
+      o.bob = Math.sin(t * 7) * T * 0.045;
+      o.squash = Math.max(0, Math.sin(t * 14)) * 0.05;
+    }
+    if (e.dead) o.scale = 1 - Math.min(1, -e.timer / 0.35) * 0.4;
+    if (sink > 0 && sink < 1) Art.ripperMound(ctx, x, y, T, t, false);
+    Art.ripper(ctx, dir, x, y, T, o);
+    if (e.state === 'rise' || e.state === 'dive') Art.ripperDust(ctx, x, y, T, 1 - Math.abs(0.5 - sink) * 2);
   },
 
   _drawSkeleton(ctx, x, y, T, e) {

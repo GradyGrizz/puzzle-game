@@ -371,8 +371,17 @@ const ScreenGame = {
           !!(this.state.chest && !this.state.chest.opened && this.state.chest.r === r && this.state.chest.c === c);
       });
     };
+    // only the room's stone — what a burrowing creature still can't pass
+    const solidWall = (x, y, half) => {
+      const pts = [[x - half, y - half], [x + half, y - half], [x - half, y + half], [x + half, y + half]];
+      return pts.some(([px, py]) => {
+        const r = Math.floor(py), c = Math.floor(px);
+        if (r < 0 || c < 0 || r >= this.state.h || c >= this.state.w) return true;
+        return this.state.tiles[r][c] === TILE.WALL;
+      });
+    };
     return {
-      solid,
+      solid, solidWall,
       lineClear: (x1, y1, x2, y2) => {
         const d = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.ceil(d / 0.2));
         for (let i = 1; i < n; i++) if (solid(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, 0.08)) return false;
@@ -392,7 +401,11 @@ const ScreenGame = {
           if (Snd.exitOpen) Snd.exitOpen();
           this.showToast('THE COMBAT SEAL BREAKS.');
         }
-      } else if (ev.type === 'dartFired') { if (Snd.dart) Snd.dart(); }
+      } else if (ev.type === 'ripperDig') { if (Snd.ripperDig) Snd.ripperDig(); }
+      else if (ev.type === 'ripperBurst') { if (Snd.ripperBurst) Snd.ripperBurst(); Platform.haptic('light'); }
+      else if (ev.type === 'ripperCharge') { if (Snd.ripperCharge) Snd.ripperCharge(); }
+      else if (ev.type === 'ripperSlam') { if (Snd.ripperSlam) Snd.ripperSlam(); Platform.haptic('heavy'); }
+      else if (ev.type === 'dartFired') { if (Snd.dart) Snd.dart(); }
       else if (ev.type === 'dartImpact') { if (Snd.dartHit) Snd.dartHit(); }
       else if (ev.type === 'playerHit') {
         if (Snd.playerHit) Snd.playerHit();

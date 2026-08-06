@@ -162,6 +162,11 @@ const Snd = {
   roll()      { this.noise(0.16, 0.07, 0, 500); this.tone(180, 0.14, 'sine', 0.10, 0, 90); },
   enemyHit()  { this.tone(240, 0.07, 'square', 0.13, 0, 120); this.noise(0.05, 0.08, 0, 1400); },
   enemyDown() { this.tone(180, 0.18, 'square', 0.13, 0, 55); this.noise(0.12, 0.09, 0, 500); },
+  // ── Earth Ripper ──
+  ripperDig()    { this.noise(0.34, 0.10, 0, 260); this.tone(90, 0.30, 'sawtooth', 0.07, 0, 45); },
+  ripperBurst()  { this.noise(0.22, 0.15, 0, 420); this.tone(150, 0.20, 'square', 0.09, 0, 320); },
+  ripperCharge() { this.tone(190, 0.26, 'sawtooth', 0.10, 0, 420); this.noise(0.20, 0.07, 0, 900); },
+  ripperSlam()   { this.tone(64, 0.20, 'sine', 0.28); this.noise(0.16, 0.16, 0, 380); },
   dart()      { this.tone(820, 0.06, 'triangle', 0.09, 0, 420); },
   dartHit()   { this.noise(0.05, 0.07, 0, 1800); },
   playerHit() { this.tone(140, 0.14, 'sawtooth', 0.16, 0, 75); },
