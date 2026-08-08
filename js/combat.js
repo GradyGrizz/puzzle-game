@@ -437,8 +437,11 @@ const Combat = {
       // dizzy: whole-pixel sway, no distortion
       o.shake = Math.round(Math.sin(t * 26) * 1.6) * px;
     } else if (e.state === 'lockon') {
-      // the tell: one small hop up and back down — no shaking
+      // the tell: one small hop up and back down — no shaking, just the "!"
       o.bob = -Math.round(Math.max(0, Math.sin(t * 9)) * 2) * px;
+    } else if (e.state === 'burrow') {
+      // digging in: the body shivers as it works itself under the floor
+      o.shake = Math.round(Math.sin(t * 60) * 1.2) * px;
     } else if (e.state === 'idle' || e.state === 'recover') {
       // slow plodding bob — a 2-step cycle, integer pixels only
       o.bob = (Math.sin(t * 5) > 0 ? -1 : 0) * px;
