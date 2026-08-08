@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '8/6/2026 1:03pm (mst)';
+const BUILD_STAMP = '8/8/2026 10:17am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -720,6 +720,7 @@ const SPRITE_LAB_CHARACTERS = [
   { id: 'hero', name: 'DELVER', sub: '12 ANIMATIONS' },
   { id: 'skeleton', name: 'SKELETON', sub: '9 ANIMATIONS' },
   { id: 'dart', name: 'MASKED TRIBALIST', sub: '4 ANIMATIONS' },
+  { id: 'ripper', name: 'EARTH RIPPER', sub: '9 ANIMATIONS' },
 ];
 
 const SPRITE_LAB_ANIMS = {
@@ -753,6 +754,21 @@ const SPRITE_LAB_ANIMS = {
     { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
     { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
     { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
+  ],
+  // The Ripper's "animations" are its ambush states: it plods, tells, digs
+  // under, tunnels, bursts out, and reels when it whiffs. Each entry below
+  // drives Combat._drawRipper with that state so the lab shows the real VFX
+  // (mound, dirt, tunnel marks, dizzy stars) exactly as combat renders them.
+  ripper: [
+    { label: 'IDLE UP', dir: 'up', kind: 'idle' },
+    { label: 'IDLE DOWN', dir: 'down', kind: 'idle' },
+    { label: 'IDLE LEFT', dir: 'left', kind: 'idle' },
+    { label: 'IDLE RIGHT', dir: 'right', kind: 'idle' },
+    { label: 'LOCK-ON TELL', dir: 'down', kind: 'lockon' },
+    { label: 'BURROW IN', dir: 'down', kind: 'burrow' },
+    { label: 'TUNNELLING', dir: 'down', kind: 'under' },
+    { label: 'BURST OUT', dir: 'down', kind: 'emerge' },
+    { label: 'STUNNED', dir: 'down', kind: 'stun' },
   ],
 };
 
@@ -929,6 +945,26 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
       timer: attacking ? Combat.ENEMY.skeleton.windup * (1 - cycle) : 0,
     };
     Combat._drawSkeleton(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, e);
+    return;
+  }
+  if (id === 'ripper') {
+    const cfg = Combat.ENEMY.ripper;
+    const face = spriteLabFace(anim.dir);
+    const kind = anim.kind === 'idle' ? 'idle' : anim.kind;
+    // Loop each timed state on its real duration so the lab plays it back at
+    // the same pace combat does; 'under' and 'idle' just run continuously.
+    const dur = kind === 'burrow' ? cfg.burrowStartDuration
+      : kind === 'emerge' ? cfg.emergeRise
+      : kind === 'stun' ? cfg.stunDuration
+      : kind === 'lockon' ? cfg.lockOnDuration : 0;
+    // these states count their timer DOWN, so invert the loop phase
+    const timer = dur ? dur * (1 - ((t / (dur + 0.45)) % 1)) : 0;
+    const e = {
+      type: 'ripper', x: 0, y: 0,
+      faceX: face[0], faceY: face[1],
+      state: kind, timer, flash: 0, trail: [],
+    };
+    Combat._drawRipper(ctx, Math.round(x - tile / 2), Math.round(y - tile), tile, e, t);
     return;
   }
   const face = spriteLabFace(anim.dir);

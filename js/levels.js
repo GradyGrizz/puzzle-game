@@ -394,6 +394,8 @@ const TEST_DUNGEON = {
         { id: 'arena-skeleton-c', type: 'skeleton', r: 5, c: 9 },
         { id: 'arena-dart-a', type: 'dart', r: 2, c: 10 },
         { id: 'arena-dart-b', type: 'dart', r: 8, c: 2 },
+        { id: 'arena-ripper-a', type: 'ripper', r: 5, c: 3 },
+        { id: 'arena-ripper-b', type: 'ripper', r: 5, c: 9 },
       ],
     }),
 
