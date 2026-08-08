@@ -126,7 +126,7 @@ function easeOutBounce(x) {
 // top, bounces to a stop with a little screen-shake + thud, a shine sweeps
 // across it, then the rest of the screen fades in.
 // build stamp — bump this to the deploy time (Arizona/Phoenix time) on each update
-const BUILD_STAMP = '8/8/2026 10:17am (mst)';
+const BUILD_STAMP = '8/8/2026 10:40am (mst)';
 
 const ScreenTitle = {
   FALL: 0.85, SHINE_DELAY: 0.12, SHINE_DUR: 0.6,
@@ -974,12 +974,39 @@ function drawSpriteLabCharacter(ctx, id, anim, t, x, y, tile) {
 }
 
 const ScreenSpriteLab = {
-  t: 0, sel: 0, cards: [],
+  t: 0, sel: 0, cards: [], scrollX: 0,
   enter() {
     if (!Save.devOn()) { App.setScreen('menu'); return; }
-    this.t = 0; this.sel = 0; this.cards = [];
+    this.t = 0; this.sel = 0; this.cards = []; this.scrollX = 0;
   },
   update(dt) { this.t += dt; },
+
+  // Three cards stay visible at a time; any beyond that live off to the right
+  // and are reached by scrolling, so the roster can grow without cards being
+  // clipped off the screen edge.
+  _metrics(W, H) {
+    const gap = 14;
+    const totalW = Math.min(W - 32, 660);
+    const cardW = Math.floor((totalW - gap * 2) / 3);
+    const cardH = Math.min(230, H - 105);
+    const n = SPRITE_LAB_CHARACTERS.length;
+    const contentW = n * cardW + (n - 1) * gap;
+    const viewW = Math.min(contentW, cardW * 3 + gap * 2);
+    const viewX = Math.round((W - viewW) / 2);
+    const y = Math.max(78, Math.round((H - cardH) / 2 + 18));
+    return { gap, cardW, cardH, contentW, viewW, viewX, y, maxScroll: Math.max(0, contentW - viewW) };
+  },
+  _clamp(m) { this.scrollX = Math.max(0, Math.min(m.maxScroll, this.scrollX)); },
+  // keep the highlighted card fully inside the viewport
+  _ensureVisible() {
+    const m = this._metrics(App.W, App.H);
+    const left = this.sel * (m.cardW + m.gap);
+    const right = left + m.cardW;
+    if (left < this.scrollX) this.scrollX = left;
+    else if (right > this.scrollX + m.viewW) this.scrollX = right - m.viewW;
+    this._clamp(m);
+  },
+
   draw(ctx, W, H) {
     drawBackdrop(ctx, W, H, this.t);
     const s = Math.max(2, Math.floor(W / 240));
@@ -987,18 +1014,18 @@ const ScreenSpriteLab = {
     drawText(ctx, 'CHOOSE A CHARACTER', W / 2, 24 + 8 * (s + 1) + 5, 1, PAL.uiDim, 'center');
     drawText(ctx, '◀ BACK', 14, 10, 1, PAL.uiDim, 'left');
 
-    const gap = 14;
-    const totalW = Math.min(W - 32, 660);
-    const cardW = Math.floor((totalW - gap * 2) / 3);
-    const cardH = Math.min(230, H - 105);
-    const startX = Math.round((W - (cardW * 3 + gap * 2)) / 2);
-    const y = Math.max(78, Math.round((H - cardH) / 2 + 18));
+    const m = this._metrics(W, H);
+    this._clamp(m);
+    const { gap, cardW, cardH, viewX, viewW, y } = m;
     this.cards = [];
+    ctx.save();
+    ctx.beginPath(); ctx.rect(viewX, y - 6, viewW, cardH + 12); ctx.clip();
     for (let i = 0; i < SPRITE_LAB_CHARACTERS.length; i++) {
       const ch = SPRITE_LAB_CHARACTERS[i];
-      const x = startX + i * (cardW + gap);
-      const selected = i === this.sel;
+      const x = viewX + i * (cardW + gap) - this.scrollX;
       this.cards.push({ x, y, w: cardW, h: cardH });
+      if (x + cardW < viewX - 4 || x > viewX + viewW + 4) continue;   // fully off-view
+      const selected = i === this.sel;
       Art.panel(ctx, x, y, cardW, cardH);
       if (selected) {
         ctx.fillStyle = PAL.goldHi;
@@ -1011,6 +1038,21 @@ const ScreenSpriteLab = {
       drawTextFit(ctx, ch.name, x + cardW / 2, y + 16, cardW - 20, s, selected ? PAL.goldHi : PAL.ui, 'center', '#000');
       drawTextFit(ctx, ch.sub, x + cardW / 2, y + cardH - 24, cardW - 16, 1, PAL.uiDim, 'center');
     }
+    ctx.restore();
+
+    if (m.maxScroll > 0) {
+      // edge arrows showing there is more roster either way
+      const midY = y + cardH / 2;
+      ctx.fillStyle = this.scrollX > 1 ? PAL.goldHi : PAL.uiDark;
+      drawText(ctx, '◀', viewX - 16, midY - 4, 1, ctx.fillStyle, 'center');
+      ctx.fillStyle = this.scrollX < m.maxScroll - 1 ? PAL.goldHi : PAL.uiDark;
+      drawText(ctx, '▶', viewX + viewW + 16, midY - 4, 1, ctx.fillStyle, 'center');
+      // scrollbar under the strip
+      const barW = Math.max(28, viewW * (viewW / m.contentW));
+      const barX = viewX + (m.maxScroll ? (this.scrollX / m.maxScroll) * (viewW - barW) : 0);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(viewX, y + cardH + 10, viewW, 3);
+      ctx.fillStyle = PAL.gold; ctx.fillRect(barX, y + cardH + 10, barW, 3);
+    }
   },
   _open() {
     const ch = SPRITE_LAB_CHARACTERS[this.sel];
@@ -1021,16 +1063,33 @@ const ScreenSpriteLab = {
   onDirPress(dc, dr) {
     if (!dc) return;
     this.sel = (this.sel + dc + SPRITE_LAB_CHARACTERS.length) % SPRITE_LAB_CHARACTERS.length;
+    this._ensureVisible();
     Snd.blip();
   },
   onDirRelease() {},
   onConfirm() { this._open(); },
+  // drag sideways / wheel to run through the roster
+  onScrollX(dx) {
+    const m = this._metrics(App.W, App.H);
+    if (!m.maxScroll) return;
+    this.scrollX -= dx;
+    this._clamp(m);
+  },
   onTap(x, y) {
     if (y < 42 && x < 105) { this.onBack(); return; }
+    const m = this._metrics(App.W, App.H);
+    // tapping the edge arrows pages the strip by one card
+    if (m.maxScroll > 0 && y >= m.y && y <= m.y + m.cardH) {
+      if (x < m.viewX) { this.scrollX -= m.cardW + m.gap; this._clamp(m); Snd.blip(); return; }
+      if (x > m.viewX + m.viewW) { this.scrollX += m.cardW + m.gap; this._clamp(m); Snd.blip(); return; }
+    }
     for (let i = 0; i < this.cards.length; i++) {
       const r = this.cards[i];
-      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
-        this.sel = i; this._open(); return;
+      // ignore taps on the slivers scrolled outside the viewport
+      if (r.x + r.w <= m.viewX || r.x >= m.viewX + m.viewW) continue;
+      if (x >= Math.max(r.x, m.viewX) && x < Math.min(r.x + r.w, m.viewX + m.viewW) &&
+          y >= r.y && y < r.y + r.h) {
+        this.sel = i; this._ensureVisible(); this._open(); return;
       }
     }
   },

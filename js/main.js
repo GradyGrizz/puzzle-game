@@ -222,7 +222,7 @@ const App = {
         if (this.canvas.setPointerCapture) { try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {} }
         return;
       }
-      if (ptr === null) ptr = { id: e.pointerId, x, y, ly: y, moved: false };
+      if (ptr === null) ptr = { id: e.pointerId, x, y, lx: x, ly: y, moved: false };
     });
     this.canvas.addEventListener('pointermove', e => {
       const r = this.canvas.getBoundingClientRect();
@@ -232,10 +232,16 @@ const App = {
         return;
       }
       if (!ptr || e.pointerId !== ptr.id) return;
-      const dy = y - ptr.ly;
-      if (Math.abs(y - ptr.y) > 9) ptr.moved = true;
-      if (ptr.moved && this.screen && this.screen.onScroll) this.screen.onScroll(dy);
-      ptr.ly = y;
+      const dy = y - ptr.ly, dx = x - ptr.lx;
+      // screens with a horizontal carousel opt in via onScrollX; only those
+      // treat a sideways drag as a scroll (and therefore not a tap)
+      const horiz = !!(this.screen && this.screen.onScrollX);
+      if (Math.abs(y - ptr.y) > 9 || (horiz && Math.abs(x - ptr.x) > 9)) ptr.moved = true;
+      if (ptr.moved && this.screen) {
+        if (horiz) this.screen.onScrollX(dx);
+        if (this.screen.onScroll) this.screen.onScroll(dy);
+      }
+      ptr.ly = y; ptr.lx = x;
     });
     const endStick = () => { stickId = null; if (this.screen && this.screen.onStickEnd) this.screen.onStickEnd(); };
     const ptrUp = e => {
@@ -254,10 +260,14 @@ const App = {
 
     // mouse-wheel / trackpad scrolling (desktop) for scrollable screens
     this.canvas.addEventListener('wheel', e => {
-      if (this.transition || !this.screen || !this.screen.onScroll) return;
+      if (this.transition || !this.screen) return;
+      if (!this.screen.onScroll && !this.screen.onScrollX) return;
       e.preventDefault();
       const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY; // lines -> px
-      this.screen.onScroll(-d);
+      const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+      // a carousel screen takes either axis, so a plain vertical wheel still pages it
+      if (this.screen.onScrollX) this.screen.onScrollX(-(dx || d));
+      if (this.screen.onScroll) this.screen.onScroll(-d);
     }, { passive: false });
 
     // d-pad buttons

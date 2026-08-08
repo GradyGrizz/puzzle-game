@@ -988,23 +988,63 @@ ripper(ctx, dir, x, y, tile, o) {
 },
 
 // churned earth it travels under — terrain spray, not the creature
+// A chunky pixel-art heap of spoil that sits ON the floor and rises above it,
+// built from whole-pixel rows (no ellipses) so it reads like the rest of the
+// game's tiles. While active, clods of dirt arc out of the hole.
 ripperMound(ctx, x, y, tile, t, active) {
-  const cx = x + tile / 2, cy = y + tile * 0.72;
-  const w = tile * (active ? 0.72 : 0.56), h = tile * 0.26;
+  const px = Math.max(1, Math.round(tile / 30));
+  const cx = Math.round(x + tile / 2);
+  const base = Math.round(y + tile);                 // the floor the heap rests on
+  // widths in "art pixels", top row first — a squat, slightly lumpy bump
+  const rows = active ? [4, 9, 14, 18, 20, 20] : [3, 7, 11, 15, 17, 17];
+  const cols = ['#9a7a52', '#8a6c48', '#7d6142', '#6b5338', '#5a462f', '#4a3a2a'];
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath(); ctx.ellipse(cx, cy + 2, w * 0.55, h * 0.6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#4a3a2a';
-  ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.5, h * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#6b5338';
-  ctx.beginPath(); ctx.ellipse(cx, cy - 1, w * 0.36, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  // hard pixel shadow under the heap
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(cx - (rows[rows.length - 1] / 2) * px, base, rows[rows.length - 1] * px, px);
+  for (let i = 0; i < rows.length; i++) {
+    const w = Math.round(rows[i]) * px;
+    ctx.fillStyle = cols[Math.min(cols.length - 1, i)];
+    ctx.fillRect(cx - Math.round(w / 2), base - (rows.length - i) * px, w, px);
+  }
+  // embedded rocks: a few grey chips with a lit top pixel
+  const rocks = [[-7, -4], [3, -5], [-2, -6], [6, -3], [-5, -2], [1, -2]];
+  for (let i = 0; i < rocks.length; i++) {
+    const rx = cx + rocks[i][0] * px, ry = base + rocks[i][1] * px;
+    ctx.fillStyle = '#4c4740'; ctx.fillRect(rx, ry, px * 2, px * 2);
+    ctx.fillStyle = i & 1 ? '#9a938a' : '#837b70'; ctx.fillRect(rx, ry, px * 2, px);
+  }
   if (active) {
+    // clods thrown clear of the hole, arcing up and falling back
     for (let i = 0; i < 5; i++) {
-      const a = t * 6 + i * 1.7, rr = (i % 3) + 1;
-      ctx.fillStyle = i & 1 ? '#7d6142' : '#5a462f';
-      ctx.fillRect(cx + Math.cos(a) * w * 0.5, cy - 2 + Math.sin(a * 1.3) * h * 0.5, rr, rr);
+      const ph = ((t * 2.6) + i * 0.37) % 1;
+      const dir = (i % 2) ? 1 : -1;
+      const dx = dir * (3 + i * 2) * px;
+      const hop = Math.round(Math.sin(ph * Math.PI) * 6) * px;
+      if (hop <= 0) continue;
+      ctx.fillStyle = i & 1 ? '#8a6c48' : '#5a462f';
+      ctx.fillRect(cx + dx, base - px * 2 - hop, px, px);
     }
   }
+  ctx.restore();
+},
+
+// small pixelated red "!" — the Ripper's lock-on tell, drawn above its head
+ripperAlert(ctx, x, y, tile, rise) {
+  const px = Math.max(1, Math.round(tile / 30));
+  const cx = Math.round(x + tile / 2) - px;          // 2px-wide stem, centred
+  const bot = Math.round(y - tile * 0.20) - (rise || 0);
+  ctx.save();
+  // dark outline so it reads on any floor — stem and dot are outlined
+  // separately, leaving one clear empty row between them
+  ctx.fillStyle = 'rgba(20,4,4,0.85)';
+  ctx.fillRect(cx - px, bot - px * 9, px * 4, px * 6);   // rows -9..-4
+  ctx.fillRect(cx - px, bot - px * 2, px * 4, px * 4);   // rows -2..+1
+  ctx.fillStyle = '#e03028';
+  ctx.fillRect(cx, bot - px * 8, px * 2, px * 4);        // stem, rows -8..-5
+  ctx.fillRect(cx, bot - px, px * 2, px * 2);            // dot, rows -1..0
+  ctx.fillStyle = '#ff6a58';                             // lit left edge
+  ctx.fillRect(cx, bot - px * 8, px, px * 4);
   ctx.restore();
 },
 
@@ -1051,16 +1091,21 @@ ripperStars(ctx, x, y, tile, t) {
 
 // dirt kicked up as it breaks the surface or dives
 ripperDust(ctx, x, y, tile, p) {
-  const cx = x + tile / 2, cy = y + tile * 0.82;
+  const px = Math.max(1, Math.round(tile / 30));
+  const cx = Math.round(x + tile / 2), base = Math.round(y + tile);
   const k = Math.max(0, Math.min(1, p));
   ctx.save();
-  ctx.globalAlpha *= 1 - k;
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + i;
-    const d = tile * (0.15 + k * 0.65);
-    const s = Math.max(1, Math.round(tile * 0.09 * (1 - k)));
+  ctx.globalAlpha *= 1 - k * 0.75;
+  // blocky spray snapped to the pixel grid, thrown wider as the burst peaks
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + i;
+    const d = tile * (0.12 + k * 0.55);
+    const sx = cx + Math.round(Math.cos(a) * d / px) * px;
+    // always thrown UP out of the hole — never below the floor line
+    const sy = base - Math.round(Math.abs(Math.sin(a)) * d * 0.5 / px) * px;
+    const s = (i % 3 === 0) ? px * 2 : px;
     ctx.fillStyle = i % 3 === 0 ? '#8a6c48' : (i % 3 === 1 ? '#6b5338' : '#4a3a2a');
-    ctx.fillRect(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.55, s, s);
+    ctx.fillRect(sx, sy - px * 2, s, s);
   }
   ctx.restore();
 },

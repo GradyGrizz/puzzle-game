@@ -437,8 +437,8 @@ const Combat = {
       // dizzy: whole-pixel sway, no distortion
       o.shake = Math.round(Math.sin(t * 26) * 1.6) * px;
     } else if (e.state === 'lockon') {
-      // the tell: a tight shiver in place
-      o.shake = Math.round(Math.sin(t * 60) * 1.2) * px;
+      // the tell: one small hop up and back down — no shaking
+      o.bob = -Math.round(Math.max(0, Math.sin(t * 9)) * 2) * px;
     } else if (e.state === 'idle' || e.state === 'recover') {
       // slow plodding bob — a 2-step cycle, integer pixels only
       o.bob = (Math.sin(t * 5) > 0 ? -1 : 0) * px;
@@ -453,6 +453,8 @@ const Combat = {
     else if (e.state === 'emerge') Art.ripperDust(ctx, x, y, T, sink);
     // stars while it reels
     if (e.state === 'stun') Art.ripperStars(ctx, x, y, T, t);
+    // the "!" rides the hop so the tell reads at a glance
+    if (e.state === 'lockon') Art.ripperAlert(ctx, x, y, T, -(o.bob || 0));
   },
 
   _drawSkeleton(ctx, x, y, T, e) {
